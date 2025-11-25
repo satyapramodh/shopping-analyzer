@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Costco Receipt Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+ 
+  <!-- Chart.js Library -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+ 
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card-bg: #ffffff;
+      --accent: #2563eb;
+      --accent-soft: #e0edff;
+      --gas-accent: #dc2626;
+      --gas-soft: #fee2e2;
+      --gold: #d97706;
+      --gold-soft: #fef3c7;
+      --refund-accent: #7c3aed;
+      --refund-soft: #f3e8ff;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --success: #16a34a;
+      --danger: #ef4444;
+      --radius-lg: 18px;
+      --shadow-soft: 0 10px 25px rgba(15, 23, 42, 0.05);
+    }
+ 
+    * { box-sizing: border-box; }
+ 
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      padding-bottom: 60px;
+    }
+ 
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 16px;
+    }
+ 
+    /* HEADER */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 30px;
+    }
+ 
+    header h1 {
+      margin: 0;
+      font-size: 1.8rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+ 
+    .date-badge {
+      background: #e5e7eb;
+      color: var(--text-main);
+      font-size: 0.9rem;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-weight: 500;
+    }
+ 
+    /* UPLOADER */
+    .uploader {
+      padding: 10px 16px;
+      background: var(--card-bg);
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.9rem;
+    }
+ 
+    .status {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+      text-align: right;
+    }
+ 
+    /* SECTIONS */
+    .section-header {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin: 40px 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--border);
+    }
+ 
+    /* GRIDS */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+ 
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+ 
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+ 
+    /* CARDS */
+    .summary-card {
+      background: var(--card-bg);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid var(--border);
+    }
+ 
+    .summary-card.gold { border-left: 4px solid var(--gold); }
+    .summary-card.gas { border-left: 4px solid var(--gas-accent); }
+    .summary-card.refund { border-left: 4px solid var(--refund-accent); }
+ 
+    .summary-card .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+ 
+    .summary-card .value {
+      margin-top: 6px;
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+ 
+    .summary-card .sub {
+      margin-top: 4px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+ 
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid var(--border);
+    }
+ 
+    .card.gas-container { border-top: 4px solid var(--gas-accent); }
+ 
+    .card h2 {
+      margin: 0 0 4px;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+ 
+    .card .subtitle {
+      margin: 0 0 16px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+ 
+    /* TABLES */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+ 
+    thead { background: var(--accent-soft); }
+    .gold-table thead { background: var(--gold-soft); color: #92400e; }
+ 
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+ 
+    th:first-child, td:first-child { width: 1%; white-space: nowrap; }
+    th:last-child, td:last-child { text-align: right; }
+    tbody tr:nth-child(even) { background: #f9fafb; }
+ 
+    .money { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .pos { color: var(--success); }
+    .neg { color: var(--danger); }
+ 
+    .chart-wrapper {
+      position: relative;
+      height: 300px;
+      width: 100%;
+    }
+ 
+    @media (max-width: 640px) {
+      .uploader { width: 100%; flex-wrap: wrap; justify-content: center; }
+      .date-badge { margin-top: 5px; }
+    }
+
+     .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .year-filter {
+      padding: 8px 12px;
+      background: var(--card-bg);
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .year-filter select {
+      border: none;
+      background: transparent;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    @media (max-width: 640px) {
+      .controls-row {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  </style>
+</head>
+<body>
+ 
+<div class="page">
+  <header>
+    <div>
+      <h1>
+        <span class="icon">🧾</span>Enhanced Costco Analyzer
+        <span id="dateRangeTitle" class="date-badge">Waiting for file...</span>
+      </h1>
+      <p>Upload your JSON receipts to see spending insights.</p>
+    </div>
+    <div>
+      <div class="controls-row">
+        <div class="uploader">
+          <label for="fileInput">Select JSON:</label>
+          <input id="fileInput" type="file" accept="application/json,.json" />
+        </div>
+
+        <div class="year-filter">
+          <label for="yearSelect">Year:</label>
+          <select id="yearSelect" disabled>
+            <option value="all">All years</option>
+          </select>
+        </div>
+      </div>
+      <div id="status" class="status"></div>
+    </div>  </header>
+ 
+  <!-- MERCHANDISE SECTION -->
+  <div class="section-header"><span class="icon">🛒</span> Warehouse Merchandise</div>
+ 
+  <section class="summary-grid">
+    <div class="summary-card">
+      <div class="label">Net Spent (Merch)</div>
+      <div class="value" id="totalSpent">–</div>
+      <div class="sub">Purchases - Refunds</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Net Items</div>
+      <div class="value" id="totalPurchases">–</div>
+      <div class="sub">Unique Codes: <span id="uniqueItems">0</span></div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Merch Visits</div>
+      <div class="value" id="receiptCount">–</div>
+      <div class="sub">Avg <span id="avgPerReceipt"></span> / trip</div>
+    </div>
+    <div class="summary-card refund">
+        <div class="label" style="color:var(--refund-accent)">Total Refunded</div>
+        <div class="value" id="refundTotal" style="color:var(--refund-accent)">–</div>
+        <div class="sub">Returns Count: <span id="refundCount">0</span></div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Merch Locations</div>
+      <div class="value" id="uniqueWarehouses">–</div>
+      <div class="sub">Unique Warehouses</div>
+    </div>
+    <div class="summary-card gold">
+      <div class="label" style="color:#b45309">Est. Executive Reward</div>
+      <div class="value" id="totalRewards" style="color:#b45309">–</div>
+      <div class="sub">2% of Annual Subtotals</div>
+    </div>
+  </section>
+ 
+  <section class="grid-2">
+    <div class="card">
+      <h2><span class="icon">🏆</span> 2% Reward Tracker</h2>
+      <p class="subtitle">Estimated cashback based on annual pre-tax merchandise subtotals.</p>
+      <table class="gold-table">
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th>Qualifying Spend</th>
+            <th>2% Cashback</th>
+          </tr>
+        </thead>
+        <tbody id="rewardsBody"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2><span class="icon">📊</span> Merchandise Spending Trend</h2>
+      <p class="subtitle">Total spent per month (Tax included).</p>
+      <div class="chart-wrapper">
+        <canvas id="merchChart"></canvas>
+      </div>
+    </div>
+  </section>
+ 
+  <!-- NEW ITEM LISTS -->
+  <section class="grid-3">
+    <div class="card">
+        <h2><span class="icon">💎</span> Most Expensive</h2>
+        <p class="subtitle">Items with highest recorded price.</p>
+        <table>
+            <thead>
+                <tr><th>Item</th><th>Max Price</th><th>Avg</th></tr>
+            </thead>
+            <tbody id="mostExpensiveBody"></tbody>
+        </table>
+    </div>
+    <div class="card">
+        <h2><span class="icon">📈</span> Price Increases</h2>
+        <p class="subtitle">Latest price > First price recorded.</p>
+        <table>
+            <thead>
+                <tr><th>Item</th><th>Old &rarr; New</th><th>Diff</th></tr>
+            </thead>
+            <tbody id="priceIncreaseBody"></tbody>
+        </table>
+    </div>
+    <div class="card">
+        <h2><span class="icon">📉</span> Price Drops</h2>
+        <p class="subtitle">Latest price < First price recorded.</p>
+        <table>
+            <thead>
+                <tr><th>Item</th><th>Old &rarr; New</th><th>Diff</th></tr>
+            </thead>
+            <tbody id="priceDecreaseBody"></tbody>
+        </table>
+    </div>
+  </section>
+ 
+  <section class="grid-2">
+    <div class="card">
+      <h2><span class="icon">💰</span> Most Total Spent</h2>
+      <p class="subtitle">Highest cumulative spend items.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Item</th><th>Total</th><th>Cnt</th><th>Avg</th>
+          </tr>
+        </thead>
+        <tbody id="mostTotalSpentBody"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2><span class="icon">🔥</span> Most Frequently Bought</h2>
+      <p class="subtitle">Items purchased most often.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Item</th><th>Cnt</th><th>Avg</th><th>Change</th>
+          </tr>
+        </thead>
+        <tbody id="mostPurchasedBody"></tbody>
+      </table>
+    </div>
+  </section>
+ 
+  <!-- GAS SECTION -->
+  <div class="section-header" style="color:#b91c1c; border-color:#fecaca;">
+    <span class="icon">⛽</span> Gas Station Stats
+  </div>
+ 
+  <section class="summary-grid">
+    <div class="summary-card gas">
+      <div class="label">Total Gas Spent</div>
+      <div class="value" id="gasTotalSpent">–</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Total Gallons</div>
+      <div class="value" id="gasTotalGallons">–</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Avg Price/Gal</div>
+      <div class="value" id="gasAvgPrice">–</div>
+      <div class="sub">Weighted Average</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Gas Visits</div>
+      <div class="value" id="gasVisits">–</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Gas Locations</div>
+      <div class="value" id="gasLocationsCount">–</div>
+      <div class="sub">Unique Stations</div>
+    </div>
+  </section>
+ 
+  <section class="grid-2">
+    <div class="card gas-container">
+      <h2><span class="icon">📉</span> Price Per Gallon History</h2>
+      <p class="subtitle">Average price paid per month by grade.</p>
+      <div class="chart-wrapper">
+        <canvas id="gasPriceHistoryChart"></canvas>
+      </div>
+    </div>
+    <div class="card gas-container">
+      <h2><span class="icon">💳</span> Gas Spend by Grade</h2>
+      <p class="subtitle">Total monthly spend split by fuel type.</p>
+      <div class="chart-wrapper">
+        <canvas id="gasSpendBreakdownChart"></canvas>
+      </div>
+    </div>
+  </section>
+ 
+  <section class="card gas-container" style="margin-top:20px;">
+    <h2><span class="icon">📊</span> Total Monthly Gas Spending</h2>
+    <p class="subtitle">Combined fuel expenses over time.</p>
+    <div class="chart-wrapper">
+      <canvas id="gasChart"></canvas>
+    </div>
+  </section>
+ 
+  <section class="summary-grid" style="margin-top: 40px; opacity: 0.9;">
+    <div class="summary-card">
+        <div class="label">Total Unique Locations</div>
+        <div class="value" id="totalAllLocations">–</div>
+        <div class="sub">Gas + Merchandise combined</div>
+    </div>
+  </section>
+ 
+</div>
+ 
+<script>
+  // --- 1. CONFIGURATION & FORMATTERS ---
+  const currencyFormatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const numFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+ 
+  function formatMoney(v) { return currencyFormatter.format(v || 0); }
+  function formatNum(v) { return numFormatter.format(v || 0); }
+ 
+  function getMonthAbbr(dateObj) {
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const y = dateObj.getFullYear().toString().slice(-2);
+    return `${months[dateObj.getMonth()]} '${y}`;
+  }
+ 
+  // Helper to generate "YYYY-MM" keys for sorting
+  function getSortableMonthKey(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  }
+ 
+  // Global chart instances
+  let merchChartInstance = null;
+  let gasChartInstance = null;
+  let gasPriceChartInstance = null;
+  let gasSpendBreakdownInstance = null;
+   
+   // Global original receipts (for year filtering)
+  let originalReceipts = [];
+
+  // --- 2. DATA PROCESSING ---
+  function processData(receipts) {
+    // Sort receipts by date ascending
+    receipts.sort((a, b) => new Date(a.transactionDate) - new Date(b.transactionDate));
+ 
+    // Determine Date Range
+    const dates = receipts.map(r => new Date(r.transactionDate));
+    const minDate = new Date(Math.min(...dates));
+    const maxDate = new Date(Math.max(...dates));
+    const minYear = minDate.getFullYear();
+    const maxYear = maxDate.getFullYear();
+    const dateRangeStr = (minYear === maxYear)
+      ? `${minYear}`
+      : `${minYear} - ${maxYear}`;
+
+    // Data Containers
+    const merch = {
+      receipts: [],
+      itemStats: new Map(),
+      monthly: new Map(),
+      subtotalByYear: new Map(),
+      totalSpent: 0,
+      totalUnits: 0,
+      refundCount: 0,
+      refundTotal: 0,
+      locations: new Set()
+    };
+ 
+    const gas = {
+      receipts: [],
+      monthly: new Map(),
+      totalSpent: 0,
+      totalGallons: 0,
+      priceSum: 0,
+      count: 0,
+      locations: new Set()
+    };
+ 
+    const allLocations = new Set();
+ 
+    receipts.forEach(r => {
+      const date = new Date(r.transactionDate);
+      const monthKey = getSortableMonthKey(date);
+      const year = date.getFullYear();
+      const locName = (r.warehouseName || "Unknown").trim();
+      const total = Number(r.total) || 0;
+ 
+      allLocations.add(locName);
+ 
+      // Identify Gas Receipts (Type or Item Codes 800877/800599)
+      const isGas = r.receiptType === "Gas Station" || 
+                    r.documentType === "FuelReceipts" || 
+                    (r.itemArray && r.itemArray.some(i => ["800877", "800599"].includes(i.itemNumber)));
+ 
+      if (isGas) {
+        // GAS LOGIC
+        gas.receipts.push(r);
+        gas.locations.add(locName);
+        gas.totalSpent += total;
+        gas.count++;
+ 
+        // Initialize monthly map if needed
+        if (!gas.monthly.has(monthKey)) gas.monthly.set(monthKey, { spent: 0 });
+        gas.monthly.get(monthKey).spent += total;
+ 
+        // Process Gas Items (Gallons, Price)
+        if (r.itemArray) {
+          r.itemArray.forEach(item => {
+            const gals = Number(item.fuelUnitQuantity) || 0;
+            const price = Number(item.itemUnitPriceAmount) || 0;
+            if (gals > 0) {
+              gas.totalGallons += gals;
+              gas.priceSum += (price * gals); // Weighted sum for avg calc
+            }
+          });
+        }
+ 
+      } else {
+        // MERCH LOGIC
+        merch.receipts.push(r);
+        merch.locations.add(locName);
+ 
+        // Net Spend Logic
+        merch.totalSpent += total;
+ 
+        // Refund Tracking
+        if (total < 0 || r.transactionType === "Refund") {
+            merch.refundCount++;
+            merch.refundTotal += Math.abs(total);
+        }
+ 
+        // Subtotal Logic (Pre-tax, for rewards)
+        const subTotal = Number(r.subTotal) || 0; 
+        merch.subtotalByYear.set(year, (merch.subtotalByYear.get(year) || 0) + subTotal);
+ 
+        if (!merch.monthly.has(monthKey)) merch.monthly.set(monthKey, { spent: 0 });
+        merch.monthly.get(monthKey).spent += total;
+ 
+        // Item Stats
+        if (r.itemArray) {
+          r.itemArray.forEach(item => {
+            const unit = Number(item.unit) || 0;
+            const amount = Number(item.amount) || 0;
+ 
+            if (!item.itemNumber || unit <= 0 || amount <= 0) return;
+ 
+            // Item Key
+            const key = item.itemNumber;
+            const name = (item.itemDescription01 || "").trim();
+            const unitPrice = amount / unit;
+ 
+            if (!merch.itemStats.has(key)) {
+              merch.itemStats.set(key, {
+                name, itemNumber: key,
+                totalSpent: 0, 
+                totalUnits: 0, 
+                purchases: 0,
+                priceHistory: [] // Array of {date, price}
+              });
+            }
+            const stat = merch.itemStats.get(key);
+            stat.totalSpent += amount;
+            stat.totalUnits += unit;
+ 
+            merch.totalUnits += unit;
+ 
+            // Only track positive purchases as "Visits" and "Price History"
+            // We exclude returns from price history to avoid skewed min/max stats
+            if (unit > 0 && amount > 0) {
+                stat.purchases += 1; 
+                stat.priceHistory.push({ date: date, price: unitPrice });
+            }
+          });
+        }
+      }
+    });
+ 
+    // Post-process itemStats to sort price history
+    merch.itemStats.forEach(stat => {
+        stat.priceHistory.sort((a, b) => a.date - b.date);
+        if (stat.priceHistory.length > 0) {
+            stat.firstPrice = stat.priceHistory[0].price;
+            stat.lastPrice = stat.priceHistory[stat.priceHistory.length - 1].price;
+            stat.maxPrice = Math.max(...stat.priceHistory.map(p => p.price));
+            stat.minPrice = Math.min(...stat.priceHistory.map(p => p.price));
+        } else {
+            stat.firstPrice = 0; stat.lastPrice = 0; stat.maxPrice = 0; stat.minPrice = 0;
+        }
+    });
+ 
+    return { merch, gas, allLocations, dateRangeStr };
+  }
+ 
+  // --- 3. RENDERING DASHBOARD ---
+  function renderDashboard(data) {
+    const { merch, gas, allLocations, dateRangeStr } = data;
+ 
+    // Update Header
+    document.getElementById("dateRangeTitle").textContent = dateRangeStr;
+ 
+    // --- MERCH STATS ---
+    document.getElementById("totalSpent").textContent = formatMoney(merch.totalSpent);
+    document.getElementById("totalPurchases").textContent = formatNum(merch.totalUnits);
+    document.getElementById("uniqueItems").textContent = formatNum(merch.itemStats.size);
+    document.getElementById("receiptCount").textContent = formatNum(merch.receipts.length);
+    document.getElementById("uniqueWarehouses").textContent = merch.locations.size;
+    document.getElementById("refundCount").textContent = formatNum(merch.refundCount);
+    document.getElementById("refundTotal").textContent = formatMoney(merch.refundTotal);
+ 
+    const avgPerReceipt = merch.receipts.length ? merch.totalSpent / merch.receipts.length : 0;
+    document.getElementById("avgPerReceipt").textContent = formatMoney(avgPerReceipt);
+ 
+    // --- EXECUTIVE REWARDS (2%) ---
+    const rewardsBody = document.getElementById("rewardsBody");
+    rewardsBody.innerHTML = "";
+    let grandTotalRewards = 0;
+    const years = Array.from(merch.subtotalByYear.keys()).sort((a,b) => b - a);
+ 
+    years.forEach(year => {
+      const sub = merch.subtotalByYear.get(year);
+      const reward = sub * 0.02;
+      grandTotalRewards += reward;
+      rewardsBody.innerHTML += `
+        <tr>
+          <td><strong>${year}</strong></td>
+          <td>${formatMoney(sub)}</td>
+          <td class="money pos">+${formatMoney(reward)}</td>
+        </tr>
+      `;
+    });
+    document.getElementById("totalRewards").textContent = formatMoney(grandTotalRewards);
+ 
+    // --- TABLES ---
+    renderMerchTables(merch.itemStats);
+ 
+    // --- GAS STATS ---
+    document.getElementById("gasTotalSpent").textContent = formatMoney(gas.totalSpent);
+    document.getElementById("gasTotalGallons").textContent = formatNum(gas.totalGallons) + " gal";
+    const weightedAvgPrice = gas.totalGallons > 0 ? (gas.priceSum / gas.totalGallons) : 0;
+    document.getElementById("gasAvgPrice").textContent = formatMoney(weightedAvgPrice);
+    document.getElementById("gasVisits").textContent = gas.count;
+    document.getElementById("gasLocationsCount").textContent = gas.locations.size;
+    document.getElementById("totalAllLocations").textContent = allLocations.size;
+ 
+    // --- CHART 1: MERCH SPEND ---
+    renderSimpleBarChart("merchChart", merch.monthly, "Merchandise Spend ($)", "#2563eb", merchChartInstance, (i)=>merchChartInstance=i);
+ 
+    // --- CHART 2: TOTAL GAS SPEND ---
+    renderSimpleBarChart("gasChart", gas.monthly, "Total Gas Spend ($)", "#dc2626", gasChartInstance, (i)=>gasChartInstance=i);
+ 
+    // --- GAS SPECIFIC LOGIC FOR GRADE SPLIT ---
+    const gasGrades = new Map(); // Key: "YYYY-MM" -> { pSpend:0, pGal:0, rSpend:0, rGal:0 }
+ 
+    gas.receipts.forEach(r => {
+      const monthKey = getSortableMonthKey(new Date(r.transactionDate));
+      if (!gasGrades.has(monthKey)) {
+        gasGrades.set(monthKey, { pSpend: 0, pGal: 0, rSpend: 0, rGal: 0 });
+      }
+      const entry = gasGrades.get(monthKey);
+ 
+      if(r.itemArray) {
+        r.itemArray.forEach(item => {
+          const amt = Number(item.amount) || 0;
+          const gal = Number(item.fuelUnitQuantity) || 0;
+ 
+          if (item.itemNumber === "800877") { // Premium
+            entry.pSpend += amt;
+            entry.pGal += gal;
+          } else if (item.itemNumber === "800599") { // Regular
+            entry.rSpend += amt;
+            entry.rGal += gal;
+          }
+        });
+      }
+    });
+ 
+    // Prepare Data for Gas Breakdown Charts
+    const sortedGasKeys = Array.from(gasGrades.keys()).sort();
+    const gasLabels = sortedGasKeys.map(k => {
+      const [y, m] = k.split('-');
+      return getMonthAbbr(new Date(y, m - 1));
+    });
+ 
+    const pPrices = [];
+    const rPrices = [];
+    const pSpends = [];
+    const rSpends = [];
+ 
+    sortedGasKeys.forEach(k => {
+      const d = gasGrades.get(k);
+      pPrices.push(d.pGal > 0 ? d.pSpend / d.pGal : null);
+      rPrices.push(d.rGal > 0 ? d.rSpend / d.rGal : null);
+      pSpends.push(d.pSpend);
+      rSpends.push(d.rSpend);
+    });
+ 
+    // --- CHART 3: GAS PRICE HISTORY (LINE) ---
+    const ctxPrice = document.getElementById("gasPriceHistoryChart").getContext("2d");
+    if (gasPriceChartInstance) gasPriceChartInstance.destroy();
+    gasPriceChartInstance = new Chart(ctxPrice, {
+      type: 'line',
+      data: {
+        labels: gasLabels,
+        datasets: [
+          {
+            label: 'Premium ($/gal)',
+            data: pPrices,
+            borderColor: '#dc2626',
+            backgroundColor: '#dc2626',
+            tension: 0.3,
+            spanGaps: true
+          },
+          {
+            label: 'Regular ($/gal)',
+            data: rPrices,
+            borderColor: '#4b5563',
+            backgroundColor: '#4b5563',
+            tension: 0.3,
+            spanGaps: true
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: false } }
+      }
+    });
+ 
+    // --- CHART 4: GAS SPEND BREAKDOWN (STACKED BAR) ---
+    const ctxBreakdown = document.getElementById("gasSpendBreakdownChart").getContext("2d");
+    if (gasSpendBreakdownInstance) gasSpendBreakdownInstance.destroy();
+    gasSpendBreakdownInstance = new Chart(ctxBreakdown, {
+      type: 'bar',
+      data: {
+        labels: gasLabels,
+        datasets: [
+          {
+            label: 'Premium Spend',
+            data: pSpends,
+            backgroundColor: '#dc2626',
+          },
+          {
+            label: 'Regular Spend',
+            data: rSpends,
+            backgroundColor: '#9ca3af',
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { 
+          x: { stacked: true },
+          y: { stacked: true, beginAtZero: true } 
+        }
+      }
+    });
+  }
+ 
+  // --- 4. HELPER RENDER FUNCTIONS ---
+  function renderMerchTables(itemStats) {
+    const items = Array.from(itemStats.values());
+ 
+    // 1. Most Expensive (Max Price) - Filter out "0" prices from erroneous data
+    const byMaxPrice = [...items]
+        .filter(i => i.maxPrice > 0)
+        .sort((a,b) => b.maxPrice - a.maxPrice)
+        .slice(0, 10);
+ 
+    const expBody = document.getElementById("mostExpensiveBody");
+    expBody.innerHTML = "";
+    byMaxPrice.forEach(row => {
+        expBody.innerHTML += `<tr><td>${row.name}</td><td class="money">${formatMoney(row.maxPrice)}</td><td class="money">${formatMoney(row.totalSpent/row.totalUnits)}</td></tr>`;
+    });
+ 
+    // 2. Price Increases (Latest > First)
+    const byIncrease = [...items]
+        .filter(i => i.lastPrice > i.firstPrice)
+        .sort((a,b) => (b.lastPrice - b.firstPrice) - (a.lastPrice - a.firstPrice))
+        .slice(0, 10);
+ 
+    const incBody = document.getElementById("priceIncreaseBody");
+    incBody.innerHTML = "";
+    byIncrease.forEach(row => {
+        const diff = row.lastPrice - row.firstPrice;
+        incBody.innerHTML += `<tr><td>${row.name}</td><td>${formatMoney(row.firstPrice)} &rarr; ${formatMoney(row.lastPrice)}</td><td class="money pos">+${formatMoney(diff)}</td></tr>`;
+    });
+ 
+    // 3. Price Decreases (Latest < First)
+    const byDecrease = [...items]
+        .filter(i => i.lastPrice < i.firstPrice)
+        .sort((a,b) => (a.lastPrice - a.firstPrice) - (b.lastPrice - b.firstPrice))
+        .slice(0, 10);
+ 
+    const decBody = document.getElementById("priceDecreaseBody");
+    decBody.innerHTML = "";
+    byDecrease.forEach(row => {
+        const diff = row.lastPrice - row.firstPrice;
+        decBody.innerHTML += `<tr><td>${row.name}</td><td>${formatMoney(row.firstPrice)} &rarr; ${formatMoney(row.lastPrice)}</td><td class="money neg">${formatMoney(diff)}</td></tr>`;
+    });
+ 
+    // 4. Top Spend
+    const bySpend = [...items].sort((a,b) => b.totalSpent - a.totalSpent).slice(0, 10);
+    const spendBody = document.getElementById("mostTotalSpentBody");
+    spendBody.innerHTML = "";
+    bySpend.forEach((row, i) => {
+      spendBody.innerHTML += `
+        <tr>
+          <td>${i+1}</td>
+          <td><strong>${row.name}</strong></td>
+          <td class="money">${formatMoney(row.totalSpent)}</td>
+          <td>${row.totalUnits}</td>
+          <td class="money">${formatMoney(row.totalSpent/row.totalUnits)}</td>
+        </tr>
+      `;
+    });
+ 
+    // 5. Most Frequent
+    const byCount = [...items].sort((a,b) => b.totalUnits - a.totalUnits).slice(0, 10);
+    const countBody = document.getElementById("mostPurchasedBody");
+    countBody.innerHTML = "";
+    byCount.forEach((row, i) => {
+      const change = row.maxPrice - row.minPrice;
+      const changeStr = change > 0.01 ? `<span class="pos">+${formatMoney(change)}</span>` : "-";
+      countBody.innerHTML += `
+        <tr>
+          <td>${i+1}</td>
+          <td><strong>${row.name}</strong></td>
+          <td>${row.totalUnits}</td>
+          <td class="money">${formatMoney(row.totalSpent/row.totalUnits)}</td>
+          <td>${changeStr}</td>
+        </tr>
+      `;
+    });
+  }
+ 
+  function renderSimpleBarChart(canvasId, monthlyMap, label, color, instance, setInstance) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    const sortedKeys = Array.from(monthlyMap.keys()).sort();
+ 
+    const labels = sortedKeys.map(k => {
+      const [y, m] = k.split('-');
+      return getMonthAbbr(new Date(y, m - 1));
+    });
+    const data = sortedKeys.map(k => monthlyMap.get(k).spent);
+ 
+    if (instance) instance.destroy();
+ 
+    const newChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: label,
+          data: data,
+          backgroundColor: color,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+    setInstance(newChart);
+  }
+ 
+  // --- 5. EVENT LISTENER ---
+document.getElementById("fileInput").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const json = JSON.parse(ev.target.result);
+        if (!Array.isArray(json)) throw new Error("File must be a JSON array of receipts.");
+        document.getElementById("status").textContent = `Success! Loaded ${json.length} receipts.`;
+
+        // Save full dataset for later filtering
+        originalReceipts = json;
+
+        // Initial render with all years
+        const processed = processData(originalReceipts);
+        renderDashboard(processed);
+
+        // Build year list from receipts
+        const yearsSet = new Set(
+          originalReceipts
+            .map(r => new Date(r.transactionDate))
+            .filter(d => !isNaN(d))
+            .map(d => d.getFullYear())
+        );
+        const years = Array.from(yearsSet).sort((a, b) => a - b);
+
+        // Populate year dropdown
+        yearSelectEl.innerHTML = `<option value="all">All years</option>`;
+        years.forEach(y => {
+          const opt = document.createElement("option");
+          opt.value = String(y);
+          opt.textContent = y;
+          yearSelectEl.appendChild(opt);
+        });
+        yearSelectEl.disabled = false;
+        yearSelectEl.value = "all";
+      } catch (err) {
+        console.error(err);
+        document.getElementById("status").textContent = "Error: " + err.message;
+        yearSelectEl.disabled = true;
+      }
+    };
+    reader.readAsText(file);
+  });
+    // --- 6. YEAR FILTER HANDLER ---
+  const yearSelectEl = document.getElementById("yearSelect");
+
+  yearSelectEl.addEventListener("change", () => {
+    if (!originalReceipts.length) return;
+
+    const selected = yearSelectEl.value;
+
+    let filtered;
+    if (selected === "all") {
+      filtered = originalReceipts;
+    } else {
+      const yr = Number(selected);
+      filtered = originalReceipts.filter(r => {
+        const d = new Date(r.transactionDate);
+        return d.getFullYear() === yr;
+      });
+    }
+
+    const processed = processData(filtered);
+    renderDashboard(processed);
+  });
+</script>
+</body>
+</html>
