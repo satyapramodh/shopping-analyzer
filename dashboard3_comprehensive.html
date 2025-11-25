@@ -260,6 +260,7 @@
         <button class="tab-btn" onclick="switchTab('products')">Product Search</button>
         <button class="tab-btn" onclick="switchTab('categories')">Categories</button>
         <button class="tab-btn" onclick="switchTab('discounts')">Discounts</button>
+        <button class="tab-btn" onclick="switchTab('refunds')">Refunds & Returns</button>
         <button class="tab-btn" onclick="switchTab('gas')">Gas Station</button>
         <button class="tab-btn" onclick="switchTab('price-analysis')">Price Analysis</button>
         <button class="tab-btn" onclick="switchTab('analysis')">Deep Analysis</button>
@@ -460,7 +461,26 @@
                 <div id="cat-content" class="hidden">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                         <h2 id="cat-title" style="margin:0">Category Name</h2>
-                        <div class="value" id="cat-total" style="font-size:1.5rem">$0.00</div>
+                        <div style="text-align:right">
+                            <div class="value" id="cat-total" style="font-size:1.5rem; margin:0;">$0.00</div>
+                            <div class="sub">Net Spend</div>
+                        </div>
+                    </div>
+
+                    <!-- Category Stats Grid -->
+                    <div class="grid grid-4" style="margin-bottom:20px;">
+                        <div class="card" style="padding:15px;">
+                            <div class="sub">Refunded</div>
+                            <div class="value" id="cat-refund" style="font-size:1.2rem; color:#ef4444;">$0.00</div>
+                        </div>
+                        <div class="card" style="padding:15px;">
+                            <div class="sub">Return Rate</div>
+                            <div class="value" id="cat-returnRate" style="font-size:1.2rem;">0%</div>
+                        </div>
+                        <div class="card" style="padding:15px;">
+                            <div class="sub">Items Returned</div>
+                            <div class="value" id="cat-returnCount" style="font-size:1.2rem;">0</div>
+                        </div>
                     </div>
 
                     <div class="grid">
@@ -548,6 +568,78 @@
                 <h3>Discount Frequency</h3>
                 <div class="chart-container">
                     <canvas id="discountChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: REFUNDS -->
+    <div id="refunds" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card" style="border-left: 4px solid #7c3aed;">
+                <h3>Total Returned</h3>
+                <div class="value" id="ref-totalReturned">$0.00</div>
+                <div class="sub" id="ref-returnCount">0 Items</div>
+            </div>
+            <div class="card" style="border-left: 4px solid var(--success-color);">
+                <h3>Price Adjustments</h3>
+                <div class="value" id="ref-totalAdjustments">$0.00</div>
+                <div class="sub">Saved via price drops</div>
+            </div>
+            <div class="card">
+                <h3>Return Rate</h3>
+                <div class="value" id="ref-rate">0.0%</div>
+                <div class="sub">Of total spend</div>
+            </div>
+            <div class="card">
+                <h3>Net Spend</h3>
+                <div class="value" id="ref-netSpend">$0.00</div>
+                <div class="sub">Total - Returns - Adjustments</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <h3>Returns by Department</h3>
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="refundsDeptChart"></canvas>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Returned Items</h3>
+                <p class="sub">Items returned for a full refund.</p>
+                <div class="table-container">
+                    <table id="returnsTable">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Returned Date</th>
+                                <th>Bought Date</th>
+                                <th>Days Kept</th>
+                                <th class="money">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Price Adjustments (Refunds)</h3>
+                <p class="sub">Partial refunds or credits (e.g. price drops).</p>
+                <div class="table-container">
+                    <table id="adjustmentsTable">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Date</th>
+                                <th class="money">Refunded</th>
+                                <th class="money">Orig Price</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -730,7 +822,7 @@
     
     // --- SORTING ---
     document.addEventListener('DOMContentLoaded', () => {
-        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable', 'topDiscountsTable', 'rewardsTable', 'priceIncreaseTable', 'priceDecreaseTable', 'mostExpensiveTable'];
+        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable', 'topDiscountsTable', 'rewardsTable', 'priceIncreaseTable', 'priceDecreaseTable', 'mostExpensiveTable', 'returnsTable', 'adjustmentsTable'];
         tables.forEach(id => makeTableSortable(id));
     });
 
@@ -906,6 +998,15 @@
         const hourCounts = {};
         const warehouseStats = {};
         const yearlySubtotal = {};
+        
+        // Refund Analysis
+        const returnsList = [];
+        const adjustmentsList = [];
+        const purchaseHistory = new Map(); // ItemID -> [{date, price, unit, warehouse}]
+        const refundsByDept = {}; // DeptID -> { amount, count }
+
+        // Sort receipts chronologically for accurate history
+        receipts.sort((a, b) => new Date(a.transactionDate) - new Date(b.transactionDate));
 
         receipts.forEach(r => {
             const total = r.total || 0;
@@ -1028,7 +1129,9 @@
                             name: `Dept ${deptId}`, // Default name
                             spend: 0,
                             items: new Set(),
-                            monthly: {}
+                            monthly: {},
+                            refundAmount: 0,
+                            returnCount: 0
                         });
                     }
                     const dStats = deptMap.get(deptId);
@@ -1060,6 +1163,83 @@
                             unit: unit,
                             warehouse: warehouse
                         });
+                        
+                        // Add to local history for refund matching
+                        if (!purchaseHistory.has(id)) purchaseHistory.set(id, []);
+                        purchaseHistory.get(id).push({
+                            date: date,
+                            price: amount / unit,
+                            unit: unit,
+                            warehouse: warehouse
+                        });
+                    } else if (amount < 0) {
+                        // Refund Logic
+                        const absAmount = Math.abs(amount);
+                        const absUnit = Math.abs(unit);
+                        const history = purchaseHistory.get(id) || [];
+                        
+                        // Try to find a matching purchase
+                        // Logic: If unit is negative and price matches a previous purchase ~exactly~, it's a return.
+                        // Otherwise, it's an adjustment.
+                        
+                        let matchIndex = -1;
+                        let isReturn = false;
+                        
+                        if (unit < 0) {
+                            // Look for a purchase with similar price
+                            // Iterate backwards to find most recent purchase of this item
+                            for (let k = history.length - 1; k >= 0; k--) {
+                                const p = history[k];
+                                // Allow 1 cent difference
+                                if (Math.abs(p.price - (absAmount / absUnit)) < 0.02) {
+                                    matchIndex = k;
+                                    isReturn = true;
+                                    break;
+                                }
+                            }
+                            
+                            // Fallback: If no price match, but unit is negative, assume return if we have ANY history
+                            if (!isReturn && history.length > 0) {
+                                isReturn = true;
+                                matchIndex = history.length - 1; // Guess the last one
+                            }
+                        }
+
+                        if (isReturn) {
+                            const p = matchIndex >= 0 ? history[matchIndex] : { date: null, price: 0 };
+                            returnsList.push({
+                                name: i.itemDescription01 || "Unknown",
+                                id: id,
+                                returnDate: date,
+                                buyDate: p.date,
+                                daysKept: p.date ? (date - p.date) / (1000 * 60 * 60 * 24) : null,
+                                amount: absAmount,
+                                unit: absUnit
+                            });
+
+                            // Dept Aggregation
+                            const deptId = i.itemDepartmentNumber || "Other";
+                            if (!refundsByDept[deptId]) refundsByDept[deptId] = { amount: 0, count: 0 };
+                            refundsByDept[deptId].amount += absAmount;
+                            refundsByDept[deptId].count += absUnit;
+
+                            if (deptMap.has(deptId)) {
+                                const d = deptMap.get(deptId);
+                                d.refundAmount += absAmount;
+                                d.returnCount += absUnit;
+                            }
+                        } else {
+                            // Price Adjustment
+                            // Try to find what item this belongs to (most recent purchase)
+                            const p = history.length > 0 ? history[history.length - 1] : null;
+                            adjustmentsList.push({
+                                name: i.itemDescription01 || "Unknown",
+                                id: id,
+                                date: date,
+                                amount: absAmount,
+                                origPrice: p ? p.price : null
+                            });
+                        }
                     }
                 });
             }
@@ -1084,6 +1264,7 @@
         renderAnalysisCharts(dowCounts, hourCounts, warehouseStats);
         renderRecurringAnalysis();
         renderDiscountsTab(totalSaved, discountCount);
+        renderRefundsTab(returnsList, adjustmentsList, totalSpent, refundsByDept);
         renderGasTab(gasSpent, gasGallons, gasPriceSum, gasVisits, gasLocations, gasMonthlySpend);
         renderPriceAnalysisTab();
     }
@@ -1168,6 +1349,15 @@
         title.textContent = d.name;
         title.setAttribute('data-id', id);
         document.getElementById('cat-total').textContent = formatMoney(d.spend);
+        
+        // Refund Stats
+        document.getElementById('cat-refund').textContent = formatMoney(d.refundAmount || 0);
+        document.getElementById('cat-returnCount').textContent = d.returnCount || 0;
+        
+        const gross = d.spend + (d.refundAmount || 0);
+        const rateVal = gross > 0 ? ((d.refundAmount || 0) / gross) * 100 : 0;
+        document.getElementById('cat-returnRate').textContent = `${rateVal.toFixed(1)}%`;
+
         // Monthly Chart
         const sortedMonths = Object.keys(d.monthly).sort();
         createChart('cat-monthlyChart', 'bar', {
@@ -1798,6 +1988,69 @@
                 <td>${i.count}</td>
             </tr>
         `).join('');
+    }
+
+    function renderRefundsTab(returns, adjustments, totalSpent, refundsByDept) {
+        const totalReturned = returns.reduce((sum, r) => sum + r.amount, 0);
+        const totalAdj = adjustments.reduce((sum, a) => sum + a.amount, 0);
+        const returnCount = returns.reduce((sum, r) => sum + r.unit, 0);
+        
+        document.getElementById('ref-totalReturned').textContent = formatMoney(totalReturned);
+        document.getElementById('ref-returnCount').textContent = `${returnCount} Items`;
+        document.getElementById('ref-totalAdjustments').textContent = formatMoney(totalAdj);
+        
+        const rate = totalSpent > 0 ? (totalReturned / totalSpent) * 100 : 0;
+        document.getElementById('ref-rate').textContent = `${rate.toFixed(2)}%`;
+        
+        document.getElementById('ref-netSpend').textContent = formatMoney(totalSpent - totalReturned - totalAdj);
+
+        // Returns Table
+        const retTbody = document.querySelector('#returnsTable tbody');
+        retTbody.innerHTML = returns.sort((a,b) => b.returnDate - a.returnDate).map(r => `
+            <tr>
+                <td>
+                    <div style="font-weight:bold">${r.name}</div>
+                    <div style="font-size:0.8em; color:var(--text-muted)">#${r.id}</div>
+                </td>
+                <td>${r.returnDate.toLocaleDateString()}</td>
+                <td>${r.buyDate ? r.buyDate.toLocaleDateString() : '-'}</td>
+                <td>${r.daysKept !== null ? Math.round(r.daysKept) + ' days' : '-'}</td>
+                <td class="money">${formatMoney(r.amount)}</td>
+            </tr>
+        `).join('');
+
+        // Adjustments Table
+        const adjTbody = document.querySelector('#adjustmentsTable tbody');
+        adjTbody.innerHTML = adjustments.sort((a,b) => b.date - a.date).map(a => `
+            <tr>
+                <td>
+                    <div style="font-weight:bold">${a.name}</div>
+                    <div style="font-size:0.8em; color:var(--text-muted)">#${a.id}</div>
+                </td>
+                <td>${a.date.toLocaleDateString()}</td>
+                <td class="money pos">${formatMoney(a.amount)}</td>
+                <td class="money">${a.origPrice ? formatMoney(a.origPrice) : '-'}</td>
+                <td style="font-size:0.85rem; color:var(--text-muted)">
+                    ${a.origPrice ? Math.round((a.amount / a.origPrice) * 100) + '% back' : ''}
+                </td>
+            </tr>
+        `).join('');
+
+        // Dept Chart
+        const sortedDepts = Object.entries(refundsByDept).sort((a,b) => b[1].amount - a[1].amount);
+        const deptLabels = sortedDepts.map(([id, s]) => {
+            const d = deptMap.get(id);
+            return d ? d.name : `Dept ${id}`;
+        });
+        
+        createChart('refundsDeptChart', 'bar', {
+            labels: deptLabels,
+            datasets: [{
+                label: 'Returned Amount ($)',
+                data: sortedDepts.map(d => d[1].amount),
+                backgroundColor: '#ef4444'
+            }]
+        });
     }
 </script>
 </body>
