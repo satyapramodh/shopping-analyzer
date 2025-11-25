@@ -147,11 +147,15 @@
 
         /* Tables */
         .table-container {
-            overflow-x: auto;
+            overflow: auto;
+            max-height: 350px; /* Fixed height for scrollable lists (~7-8 items) */
+            scrollbar-width: thin;
         }
+        
         table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate; /* Required for sticky headers */
+            border-spacing: 0;
             font-size: 0.9rem;
         }
         th, td {
@@ -159,8 +163,24 @@
             text-align: left;
             border-bottom: 1px solid var(--border-color);
         }
-        th { background: rgba(255,255,255,0.05); font-weight: 600; }
-        tr:hover { background: rgba(255,255,255,0.02); }
+        th { 
+            background: var(--card-bg); /* Opaque background for sticky behavior */
+            font-weight: 600; 
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: 0 1px 0 var(--border-color);
+        }
+        /* Add a subtle tint to headers to distinguish them */
+        th::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(128, 128, 128, 0.05);
+            pointer-events: none;
+        }
+        
+        tr:hover { background: rgba(128,128,128,0.05); }
         
         .money { font-family: monospace; text-align: right; }
         .pos { color: var(--success-color); }
@@ -318,7 +338,7 @@
                     <option value="priceAsc">Price (Low to High)</option>
                 </select>
             </div>
-            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+            <div class="table-container">
                 <table id="productTable">
                     <thead>
                         <tr>
@@ -370,6 +390,7 @@
                     <table style="width:100%">
                         <tr><td>First Bought</td><td id="pd-firstDate" style="text-align:right">-</td></tr>
                         <tr><td>Last Bought</td><td id="pd-lastDate" style="text-align:right">-</td></tr>
+                        <tr><td>Avg Frequency</td><td id="pd-frequency" style="text-align:right">-</td></tr>
                         <tr><td>Min Price</td><td id="pd-minPrice" class="money">-</td></tr>
                         <tr><td>Max Price</td><td id="pd-maxPrice" class="money">-</td></tr>
                         <tr><td>Price Change</td><td id="pd-priceChange" class="money">-</td></tr>
@@ -425,6 +446,25 @@
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <h3>Recurring Items Analysis</h3>
+            <p class="sub" style="margin-bottom:15px">Items purchased more than once, sorted by frequency.</p>
+            <div class="table-container">
+                <table id="recurringTable">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Count</th>
+                            <th class="money">Avg Days Between</th>
+                            <th>Last Purchased</th>
+                            <th>Est. Next Buy</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
 </div>
@@ -435,6 +475,49 @@
     let filteredData = [];
     let itemMap = new Map(); // Key: ItemID, Value: ItemStats
     let charts = {}; // Store chart instances
+    
+    // --- SORTING ---
+    document.addEventListener('DOMContentLoaded', () => {
+        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable'];
+        tables.forEach(id => makeTableSortable(id));
+    });
+
+    function makeTableSortable(tableId) {
+        const table = document.getElementById(tableId);
+        if (!table) return;
+        const headers = table.querySelectorAll('th');
+        
+        headers.forEach((th, index) => {
+            th.style.cursor = 'pointer';
+            th.title = "Click to sort";
+            th.addEventListener('click', () => {
+                const tbody = table.querySelector('tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                const isAsc = th.getAttribute('data-order') === 'asc';
+                
+                // Reset other headers
+                headers.forEach(h => h.removeAttribute('data-order'));
+                th.setAttribute('data-order', isAsc ? 'desc' : 'asc');
+
+                rows.sort((a, b) => {
+                    const aVal = a.children[index].innerText.replace(/[$,%]/g, '');
+                    const bVal = b.children[index].innerText.replace(/[$,%]/g, '');
+                    
+                    const aNum = parseFloat(aVal);
+                    const bNum = parseFloat(bVal);
+
+                    if (!isNaN(aNum) && !isNaN(bNum)) {
+                        return isAsc ? aNum - bNum : bNum - aNum;
+                    }
+                    return isAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                });
+
+                tbody.innerHTML = '';
+                rows.forEach(row => tbody.appendChild(row));
+            });
+        });
+    }
+
     
     // --- THEME ---
     const themeToggle = document.getElementById('themeToggle');
@@ -651,6 +734,7 @@
         renderTopLists();
         renderProductTable(); // Initial render of product table
         renderAnalysisCharts(dowCounts, hourCounts, warehouseStats);
+        renderRecurringAnalysis();
     }
 
     // --- RENDERING HELPERS ---
@@ -686,7 +770,7 @@
         const items = Array.from(itemMap.values());
         
         // Top Spenders
-        const topSpend = [...items].sort((a,b) => b.totalSpent - a.totalSpent).slice(0, 5);
+        const topSpend = [...items].sort((a,b) => b.totalSpent - a.totalSpent).slice(0, 100);
         const spendTbody = document.querySelector('#topSpendersTable tbody');
         spendTbody.innerHTML = topSpend.map(i => `
             <tr>
@@ -699,7 +783,7 @@
         `).join('');
 
         // Most Frequent
-        const topFreq = [...items].sort((a,b) => b.count - a.count).slice(0, 5);
+        const topFreq = [...items].sort((a,b) => b.count - a.count).slice(0, 100);
         const freqTbody = document.querySelector('#mostFrequentTable tbody');
         freqTbody.innerHTML = topFreq.map(i => `
             <tr>
@@ -775,6 +859,15 @@
             document.getElementById('pd-firstDate').textContent = prices[0].date.toLocaleDateString();
             document.getElementById('pd-lastDate').textContent = prices[prices.length-1].date.toLocaleDateString();
             
+            // Frequency
+            if (prices.length > 1) {
+                const daysSpan = (prices[prices.length-1].date - prices[0].date) / (1000 * 60 * 60 * 24);
+                const avgDays = daysSpan / (prices.length - 1);
+                document.getElementById('pd-frequency').textContent = `Every ~${Math.round(avgDays)} days`;
+            } else {
+                document.getElementById('pd-frequency').textContent = "One-time purchase";
+            }
+
             const priceVals = prices.map(p => p.price);
             const min = Math.min(...priceVals);
             const max = Math.max(...priceVals);
@@ -798,11 +891,31 @@
             }]
         });
 
-        // Volume Chart
+        // Volume Chart (Continuous Timeline)
         const volMap = {};
+        if (prices.length > 0) {
+            const start = new Date(prices[0].date);
+            const end = new Date(prices[prices.length-1].date);
+            // Normalize to start of month
+            start.setDate(1);
+            
+            // Generate all months
+            let curr = new Date(start);
+            while (curr <= end) {
+                const k = curr.toISOString().substring(0, 7);
+                volMap[k] = 0;
+                curr.setMonth(curr.getMonth() + 1);
+            }
+        }
+
         prices.forEach(p => {
             const k = p.date.toISOString().substring(0, 7); // YYYY-MM
-            volMap[k] = (volMap[k] || 0) + 1;
+            if (volMap.hasOwnProperty(k)) {
+                volMap[k] += 1;
+            } else {
+                // Handle edge case if date range logic missed something or single date
+                volMap[k] = (volMap[k] || 0) + 1;
+            }
         });
         const sortedVols = Object.keys(volMap).sort();
         createChart('pd-volumeChart', 'bar', {
@@ -880,6 +993,47 @@
                 <td class="money">${rate.toFixed(2)}%</td>
             </tr>
         `}).join('');
+    }
+
+    function renderRecurringAnalysis() {
+        const items = Array.from(itemMap.values()).filter(i => i.count > 1);
+        const tbody = document.querySelector('#recurringTable tbody');
+        
+        const rows = items.map(i => {
+            const dates = i.prices.map(p => p.date).sort((a,b) => a - b);
+            if (dates.length < 2) return null;
+
+            const first = dates[0];
+            const last = dates[dates.length - 1];
+            const daysSpan = (last - first) / (1000 * 60 * 60 * 24);
+            const avgDays = daysSpan / (dates.length - 1);
+            
+            const nextDate = new Date(last);
+            nextDate.setDate(nextDate.getDate() + avgDays);
+            
+            return {
+                ...i,
+                avgDays,
+                lastDate: last,
+                nextDate
+            };
+        }).filter(Boolean);
+
+        // Sort by frequency (lowest avg days)
+        rows.sort((a,b) => a.avgDays - b.avgDays);
+
+        tbody.innerHTML = rows.map(r => `
+            <tr>
+                <td>
+                    <div style="font-weight:bold">${r.name}</div>
+                    <div style="font-size:0.8em; color:var(--text-muted)">#${r.id}</div>
+                </td>
+                <td>${r.count}</td>
+                <td class="money">${r.avgDays.toFixed(1)} days</td>
+                <td>${r.lastDate.toLocaleDateString()}</td>
+                <td>${r.nextDate.toLocaleDateString()}</td>
+            </tr>
+        `).join('');
     }
 
     // --- CHART HELPER ---
