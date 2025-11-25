@@ -260,6 +260,8 @@
         <button class="tab-btn" onclick="switchTab('products')">Product Search</button>
         <button class="tab-btn" onclick="switchTab('categories')">Categories</button>
         <button class="tab-btn" onclick="switchTab('discounts')">Discounts</button>
+        <button class="tab-btn" onclick="switchTab('gas')">Gas Station</button>
+        <button class="tab-btn" onclick="switchTab('price-analysis')">Price Analysis</button>
         <button class="tab-btn" onclick="switchTab('analysis')">Deep Analysis</button>
     </div>
 
@@ -287,6 +289,11 @@
                 <div class="value" id="ov-rewards" style="color: var(--warning-color);">$0.00</div>
                 <div class="sub">Based on eligible spend</div>
             </div>
+            <div class="card" style="border-left: 4px solid #7c3aed;">
+                <h3>Total Refunded</h3>
+                <div class="value" id="ov-refunds" style="color: #7c3aed;">$0.00</div>
+                <div class="sub" id="ov-refundCount">0 Returns</div>
+            </div>
         </div>
 
         <!-- Charts -->
@@ -302,6 +309,17 @@
                 <div class="chart-container">
                     <canvas id="deptPieChart"></canvas>
                 </div>
+            </div>
+        </div>
+
+        <!-- Rewards Table -->
+        <div class="card" style="margin-bottom: 20px;">
+            <h3>2% Reward Tracker (Yearly)</h3>
+            <div class="table-container">
+                <table id="rewardsTable">
+                    <thead><tr><th>Year</th><th class="money">Qualifying Spend</th><th class="money">Est. Cashback</th></tr></thead>
+                    <tbody></tbody>
+                </table>
             </div>
         </div>
 
@@ -535,6 +553,112 @@
         </div>
     </div>
 
+    <!-- TAB: GAS -->
+    <div id="gas" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card" style="border-left: 4px solid #dc2626;">
+                <h3>Total Gas Spent</h3>
+                <div class="value" id="gas-totalSpent">$0.00</div>
+            </div>
+            <div class="card">
+                <h3>Total Gallons</h3>
+                <div class="value" id="gas-totalGallons">0</div>
+            </div>
+            <div class="card">
+                <h3>Avg Price/Gal</h3>
+                <div class="value" id="gas-avgPrice">$0.00</div>
+                <div class="sub">Weighted Average</div>
+            </div>
+            <div class="card">
+                <h3>Gas Visits</h3>
+                <div class="value" id="gas-visits">0</div>
+                <div class="sub" id="gas-locations">0 Locations</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Price Per Gallon History</h3>
+                <p class="sub">Average price paid per month by grade</p>
+                <div class="chart-container">
+                    <canvas id="gasPriceHistoryChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Gas Spend by Grade</h3>
+                <p class="sub">Total monthly spend split by fuel type</p>
+                <div class="chart-container">
+                    <canvas id="gasSpendBreakdownChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Total Monthly Gas Spending</h3>
+            <div class="chart-container">
+                <canvas id="gasMonthlyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: PRICE ANALYSIS -->
+    <div id="price-analysis" class="tab-content">
+        <div class="grid">
+            <div class="card">
+                <h3>Biggest Price Increases</h3>
+                <p class="sub">Items where Latest Price > First Price</p>
+                <div class="table-container">
+                    <table id="priceIncreaseTable">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Old &rarr; New</th>
+                                <th class="money">Diff</th>
+                                <th class="money">%</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Price Drops</h3>
+                <p class="sub">Items where Latest Price < First Price</p>
+                <div class="table-container">
+                    <table id="priceDecreaseTable">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Old &rarr; New</th>
+                                <th class="money">Diff</th>
+                                <th class="money">%</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Most Expensive Items</h3>
+            <p class="sub">Items with highest recorded price (Min 2 purchases)</p>
+            <div class="table-container">
+                <table id="mostExpensiveTable">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th class="money">Max Price</th>
+                            <th class="money">Avg Price</th>
+                            <th>Purchases</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- TAB: ANALYSIS -->
     <div id="analysis" class="tab-content">
         <div class="grid">
@@ -601,11 +725,12 @@
     let itemMap = new Map(); // Key: ItemID, Value: ItemStats
     let deptMap = new Map(); // Key: DeptID, Value: { id, name, spend, items: Set(itemId), monthly: {} }
     let discountMap = new Map(); // Key: TargetItemID, Value: { id, totalSaved, count }
+    let gasGrades = new Map(); // Key: "YYYY-MM" -> { pSpend:0, pGal:0, rSpend:0, rGal:0 }
     let charts = {}; // Store chart instances
     
     // --- SORTING ---
     document.addEventListener('DOMContentLoaded', () => {
-        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable', 'topDiscountsTable'];
+        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable', 'topDiscountsTable', 'rewardsTable', 'priceIncreaseTable', 'priceDecreaseTable', 'mostExpensiveTable'];
         tables.forEach(id => makeTableSortable(id));
     });
 
@@ -763,26 +888,41 @@
         let itemCount = 0;
         let totalSaved = 0;
         let discountCount = 0;
+        let refundTotal = 0;
+        let refundCount = 0;
+        let gasPriceSum = 0;
+        let gasVisits = 0;
+        let gasLocations = new Set();
         
         itemMap.clear();
         deptMap.clear();
         discountMap.clear();
+        gasGrades.clear();
 
         const monthlySpend = {};
+        const gasMonthlySpend = {};
         const deptSpend = {};
         const dowCounts = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0}; // Sun-Sat
         const hourCounts = {};
         const warehouseStats = {};
+        const yearlySubtotal = {};
 
         receipts.forEach(r => {
             const total = r.total || 0;
             const date = new Date(r.transactionDate);
             const monthKey = r.transactionDate.substring(0, 7); // YYYY-MM
+            const yearKey = r.transactionDate.substring(0, 4);
             const warehouse = r.warehouseName || "Unknown";
 
             // Overview Stats
             totalSpent += total;
             
+            // Refunds
+            if (total < 0 || r.transactionType === "Refund") {
+                refundCount++;
+                refundTotal += Math.abs(total);
+            }
+
             // Monthly
             monthlySpend[monthKey] = (monthlySpend[monthKey] || 0) + total;
 
@@ -799,19 +939,46 @@
                 if (!isNaN(hour)) hourCounts[hour] = (hourCounts[hour] || 0) + 1;
             }
 
-            // Rewards (Approx: Subtotal of merch)
             // Gas check
-            const isGas = r.receiptType === "Gas Station" || (r.itemArray && r.itemArray.some(i => ["800877", "800599"].includes(i.itemNumber)));
+            const isGas = r.receiptType === "Gas Station" || 
+                          r.documentType === "FuelReceipts" || 
+                          (r.itemArray && r.itemArray.some(i => ["800877", "800599"].includes(i.itemNumber)));
             
             if (isGas) {
                 gasSpent += total;
+                gasVisits++;
+                gasLocations.add(warehouse);
+                gasMonthlySpend[monthKey] = (gasMonthlySpend[monthKey] || 0) + total;
+
+                // Gas Grades Logic
+                if (!gasGrades.has(monthKey)) {
+                    gasGrades.set(monthKey, { pSpend: 0, pGal: 0, rSpend: 0, rGal: 0 });
+                }
+                const gradeEntry = gasGrades.get(monthKey);
+
                 if (r.itemArray) {
                     r.itemArray.forEach(i => {
-                        gasGallons += (i.fuelUnitQuantity || 0);
+                        const gals = i.fuelUnitQuantity || 0;
+                        const price = i.itemUnitPriceAmount || 0;
+                        const amt = i.amount || 0;
+                        
+                        if (gals > 0) {
+                            gasGallons += gals;
+                            gasPriceSum += (price * gals);
+                        }
+
+                        if (i.itemNumber === "800877") { // Premium
+                            gradeEntry.pSpend += amt;
+                            gradeEntry.pGal += gals;
+                        } else if (i.itemNumber === "800599") { // Regular
+                            gradeEntry.rSpend += amt;
+                            gradeEntry.rGal += gals;
+                        }
                     });
                 }
             } else {
                 rewardsEligible += (r.subTotal || 0);
+                yearlySubtotal[yearKey] = (yearlySubtotal[yearKey] || 0) + (r.subTotal || 0);
             }
 
             // Items
@@ -905,14 +1072,19 @@
         document.getElementById('ov-gasSpent').textContent = formatMoney(gasSpent);
         document.getElementById('ov-gasGallons').textContent = `${gasGallons.toFixed(1)} Gallons`;
         document.getElementById('ov-rewards').textContent = formatMoney(rewardsEligible * 0.02);
+        document.getElementById('ov-refunds').textContent = formatMoney(refundTotal);
+        document.getElementById('ov-refundCount').textContent = `${refundCount} Returns`;
 
         renderOverviewCharts(monthlySpend, deptSpend);
+        renderRewardsTable(yearlySubtotal);
         renderTopLists();
         renderProductTable(); // Initial render of product table
         renderCategoryTab(); // New Category Tab
         renderAnalysisCharts(dowCounts, hourCounts, warehouseStats);
         renderRecurringAnalysis();
         renderDiscountsTab(totalSaved, discountCount);
+        renderGasTab(gasSpent, gasGallons, gasPriceSum, gasVisits, gasLocations, gasMonthlySpend);
+        renderPriceAnalysisTab();
     }
 
     // --- CATEGORY TAB LOGIC ---
@@ -1028,6 +1200,71 @@
             </tr>
         `).join('');
     };
+
+    function renderDiscountsTab(totalSaved, count) {
+        document.getElementById('disc-totalSaved').textContent = formatMoney(totalSaved);
+        document.getElementById('disc-count').textContent = count;
+        document.getElementById('disc-avg').textContent = count ? formatMoney(totalSaved / count) : '$0.00';
+
+        // Top Saver Item
+        const discounts = Array.from(discountMap.values());
+        if (discounts.length > 0) {
+            const top = discounts.sort((a,b) => b.totalSaved - a.totalSaved)[0];
+            // Need to look up item name from itemMap
+            const item = itemMap.get(top.id);
+            const name = item ? item.name : `Item #${top.id}`;
+            
+            document.getElementById('disc-topItem').textContent = name;
+            document.getElementById('disc-topItemAmt').textContent = `${formatMoney(top.totalSaved)} saved`;
+        } else {
+            document.getElementById('disc-topItem').textContent = "-";
+            document.getElementById('disc-topItemAmt').textContent = "$0.00 saved";
+        }
+
+        // Table
+        const sortedDiscounts = discounts.sort((a,b) => b.totalSaved - a.totalSaved).slice(0, 50);
+        const tbody = document.querySelector('#topDiscountsTable tbody');
+        tbody.innerHTML = sortedDiscounts.map(d => {
+            const item = itemMap.get(d.id);
+            const name = item ? item.name : d.id;
+            const avg = d.count ? d.totalSaved / d.count : 0;
+            return `
+            <tr>
+                <td>${name} <span style="color:var(--text-muted); font-size:0.8em">(${d.id})</span></td>
+                <td class="money pos">${formatMoney(d.totalSaved)}</td>
+                <td>${d.count}</td>
+                <td class="money pos">${formatMoney(avg)}</td>
+            </tr>
+            `;
+        }).join('');
+
+        // Chart: Distribution of savings (e.g. top 10 items vs others)
+        const top10 = sortedDiscounts.slice(0, 10);
+        const otherSaved = totalSaved - top10.reduce((acc, curr) => acc + curr.totalSaved, 0);
+        
+        const labels = top10.map(d => {
+            const item = itemMap.get(d.id);
+            return item ? item.name.substring(0, 20) + '...' : d.id;
+        });
+        const data = top10.map(d => d.totalSaved);
+        
+        if (otherSaved > 0) {
+            labels.push('Others');
+            data.push(otherSaved);
+        }
+
+        createChart('discountChart', 'doughnut', {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: [
+                    '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+                    '#ec4899', '#6366f1', '#14b8a6', '#f97316', '#06b6d4',
+                    '#64748b' // Grey for others
+                ]
+            }]
+        });
+    }
 
     // --- RENDERING HELPERS ---
     const formatMoney = (num) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
@@ -1352,54 +1589,184 @@
     // Initialize Theme
     updateChartsTheme();
 
-    function renderDiscountsTab(totalSaved, count) {
-        document.getElementById('disc-totalSaved').textContent = formatMoney(totalSaved);
-        document.getElementById('disc-count').textContent = count;
-        document.getElementById('disc-avg').textContent = count ? formatMoney(totalSaved / count) : '$0.00';
-
-        const discounts = Array.from(discountMap.values());
+    function renderRewardsTable(yearlySubtotal) {
+        const tbody = document.querySelector('#rewardsTable tbody');
+        const years = Object.keys(yearlySubtotal).sort().reverse();
         
-        // Resolve names
-        discounts.forEach(d => {
-            const item = itemMap.get(d.id);
-            d.name = item ? item.name : `Unknown Item (${d.id})`;
+        tbody.innerHTML = years.map(y => {
+            const spend = yearlySubtotal[y];
+            const reward = spend * 0.02;
+            return `
+            <tr>
+                <td>${y}</td>
+                <td class="money">${formatMoney(spend)}</td>
+                <td class="money pos">+${formatMoney(reward)}</td>
+            </tr>
+            `;
+        }).join('');
+    }
+
+    function renderGasTab(totalSpent, totalGallons, priceSum, visits, locations, monthlySpend) {
+        document.getElementById('gas-totalSpent').textContent = formatMoney(totalSpent);
+        document.getElementById('gas-totalGallons').textContent = totalGallons.toFixed(1);
+        document.getElementById('gas-avgPrice').textContent = totalGallons ? formatMoney(priceSum / totalGallons) : '$0.00';
+        document.getElementById('gas-visits').textContent = visits;
+        document.getElementById('gas-locations').textContent = `${locations.size} Locations`;
+
+        // Prepare Data for Charts
+        const sortedKeys = Array.from(gasGrades.keys()).sort();
+        const labels = sortedKeys;
+        
+        const pPrices = [];
+        const rPrices = [];
+        const pSpends = [];
+        const rSpends = [];
+
+        sortedKeys.forEach(k => {
+            const d = gasGrades.get(k);
+            pPrices.push(d.pGal > 0 ? d.pSpend / d.pGal : null);
+            rPrices.push(d.rGal > 0 ? d.rSpend / d.rGal : null);
+            pSpends.push(d.pSpend);
+            rSpends.push(d.rSpend);
         });
 
-        // Sort by total saved
-        discounts.sort((a,b) => b.totalSaved - a.totalSaved);
+        // Chart 1: Price History
+        createChart('gasPriceHistoryChart', 'line', {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Premium ($/gal)',
+                    data: pPrices,
+                    borderColor: '#dc2626',
+                    backgroundColor: '#dc2626',
+                    tension: 0.3,
+                    spanGaps: true
+                },
+                {
+                    label: 'Regular ($/gal)',
+                    data: rPrices,
+                    borderColor: '#4b5563',
+                    backgroundColor: '#4b5563',
+                    tension: 0.3,
+                    spanGaps: true
+                }
+            ]
+        });
 
-        // Top Saver
-        if (discounts.length > 0) {
-            document.getElementById('disc-topItem').textContent = discounts[0].name;
-            document.getElementById('disc-topItemAmt').textContent = `${formatMoney(discounts[0].totalSaved)} saved`;
-        }
+        // Chart 2: Spend Breakdown
+        createChart('gasSpendBreakdownChart', 'bar', {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Premium Spend',
+                    data: pSpends,
+                    backgroundColor: '#dc2626',
+                },
+                {
+                    label: 'Regular Spend',
+                    data: rSpends,
+                    backgroundColor: '#9ca3af',
+                }
+            ]
+        });
 
-        // Table
-        const tbody = document.querySelector('#topDiscountsTable tbody');
-        tbody.innerHTML = discounts.map(d => `
-            <tr>
-                <td>
-                    <div style="font-weight:bold">${d.name}</div>
-                    <div style="font-size:0.8em; color:var(--text-muted)">#${d.id}</div>
-                </td>
-                <td class="money">${formatMoney(d.totalSaved)}</td>
-                <td>${d.count}</td>
-                <td class="money">${formatMoney(d.totalSaved / d.count)}</td>
-            </tr>
-        `).join('');
-
-        // Chart (Top 10 by Frequency)
-        const topFreq = [...discounts].sort((a,b) => b.count - a.count).slice(0, 10);
-        createChart('discountChart', 'bar', {
-            labels: topFreq.map(d => d.name.substring(0, 20) + (d.name.length>20?'...':'')),
+        // Chart 3: Monthly Total
+        const monthlyLabels = Object.keys(monthlySpend).sort();
+        createChart('gasMonthlyChart', 'bar', {
+            labels: monthlyLabels,
             datasets: [{
-                label: 'Times Discounted',
-                data: topFreq.map(d => d.count),
-                backgroundColor: '#ef4444'
+                label: 'Total Gas Spend',
+                data: monthlyLabels.map(k => monthlySpend[k]),
+                backgroundColor: '#dc2626'
             }]
         });
     }
 
+    function renderPriceAnalysisTab() {
+        const items = Array.from(itemMap.values());
+        
+        // 1. Price Increases
+        const increases = items.filter(i => {
+            if (i.prices.length < 2) return false;
+            const first = i.prices[0].price;
+            const last = i.prices[i.prices.length-1].price;
+            return last > first;
+        }).map(i => {
+            const first = i.prices[0].price;
+            const last = i.prices[i.prices.length-1].price;
+            return {
+                ...i,
+                firstPrice: first,
+                lastPrice: last,
+                diff: last - first,
+                pct: ((last - first) / first) * 100
+            };
+        }).sort((a,b) => b.diff - a.diff).slice(0, 50);
+
+        document.querySelector('#priceIncreaseTable tbody').innerHTML = increases.map(i => `
+            <tr>
+                <td>
+                    <div style="font-weight:bold">${i.name}</div>
+                    <div style="font-size:0.8em; color:var(--text-muted)">#${i.id}</div>
+                </td>
+                <td>${formatMoney(i.firstPrice)} &rarr; ${formatMoney(i.lastPrice)}</td>
+                <td class="money neg">+${formatMoney(i.diff)}</td>
+                <td class="money neg">+${i.pct.toFixed(1)}%</td>
+            </tr>
+        `).join('');
+
+        // 2. Price Drops
+        const drops = items.filter(i => {
+            if (i.prices.length < 2) return false;
+            const first = i.prices[0].price;
+            const last = i.prices[i.prices.length-1].price;
+            return last < first;
+        }).map(i => {
+            const first = i.prices[0].price;
+            const last = i.prices[i.prices.length-1].price;
+            return {
+                ...i,
+                firstPrice: first,
+                lastPrice: last,
+                diff: first - last,
+                pct: ((first - last) / first) * 100
+            };
+        }).sort((a,b) => b.diff - a.diff).slice(0, 50);
+
+        document.querySelector('#priceDecreaseTable tbody').innerHTML = drops.map(i => `
+            <tr>
+                <td>
+                    <div style="font-weight:bold">${i.name}</div>
+                    <div style="font-size:0.8em; color:var(--text-muted)">#${i.id}</div>
+                </td>
+                <td>${formatMoney(i.firstPrice)} &rarr; ${formatMoney(i.lastPrice)}</td>
+                <td class="money pos">-${formatMoney(i.diff)}</td>
+                <td class="money pos">-${i.pct.toFixed(1)}%</td>
+            </tr>
+        `).join('');
+
+        // 3. Most Expensive
+        const expensive = items.filter(i => i.count >= 2).map(i => {
+            const prices = i.prices.map(p => p.price);
+            return {
+                ...i,
+                maxPrice: Math.max(...prices),
+                avgPrice: i.totalSpent / i.count
+            };
+        }).sort((a,b) => b.maxPrice - a.maxPrice).slice(0, 50);
+
+        document.querySelector('#mostExpensiveTable tbody').innerHTML = expensive.map(i => `
+            <tr>
+                <td>
+                    <div style="font-weight:bold">${i.name}</div>
+                    <div style="font-size:0.8em; color:var(--text-muted)">#${i.id}</div>
+                </td>
+                <td class="money">${formatMoney(i.maxPrice)}</td>
+                <td class="money">${formatMoney(i.avgPrice)}</td>
+                <td>${i.count}</td>
+            </tr>
+        `).join('');
+    }
 </script>
 </body>
 </html>
