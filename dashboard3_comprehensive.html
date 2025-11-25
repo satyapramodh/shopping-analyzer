@@ -262,6 +262,7 @@
         <button class="tab-btn" onclick="switchTab('discounts')">Discounts</button>
         <button class="tab-btn" onclick="switchTab('refunds')">Refunds & Returns</button>
         <button class="tab-btn" onclick="switchTab('gas')">Gas Station</button>
+        <button class="tab-btn" onclick="switchTab('payments')">Payments</button>
         <button class="tab-btn" onclick="switchTab('price-analysis')">Price Analysis</button>
         <button class="tab-btn" onclick="switchTab('analysis')">Deep Analysis</button>
     </div>
@@ -739,6 +740,65 @@
         </div>
     </div>
 
+    <!-- TAB: PAYMENTS -->
+    <div id="payments" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card">
+                <h3>Total Payments Tracked</h3>
+                <div class="value" id="pay-total">0</div>
+                <p class="sub">Sum of all tenders</p>
+            </div>
+            <div class="card">
+                <h3>Top Payment Method</h3>
+                <div class="value" id="pay-topMethod">-</div>
+                <p class="sub" id="pay-topMethodAmt">$0.00</p>
+            </div>
+            <div class="card">
+                <h3>Est. Citi Rewards</h3>
+                <div class="value" id="pay-citiRewards">$0.00</div>
+                <p class="sub">4% Gas / 2% Warehouse</p>
+            </div>
+            <div class="card">
+                <h3>Payment Methods</h3>
+                <div class="value" id="pay-methodCount">0</div>
+                <p class="sub">Distinct cards/types</p>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Spend by Payment Method</h3>
+                <div class="chart-container">
+                    <canvas id="payMethodChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Payment Trends (Yearly)</h3>
+                <div class="chart-container">
+                    <canvas id="payHistoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Payment Method Breakdown</h3>
+            <div class="table-container">
+                <table id="paymentsTable">
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Year</th>
+                            <th class="money">Total Spend</th>
+                            <th class="money">Est. Rewards</th>
+                            <th>% of Total</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- TAB: PRICE ANALYSIS -->
     <div id="price-analysis" class="tab-content">
         <div class="grid">
@@ -1052,6 +1112,7 @@
         globalAdjustments = [];
         const purchaseHistory = new Map(); // ItemID -> [{date, price, unit, warehouse}]
         const refundsByDept = {}; // DeptID -> { amount, count }
+        const paymentStats = new Map(); // Key: MethodName -> { total: 0, count: 0, yearly: { year: 0 } }
 
         // Sort receipts chronologically for accurate history
         receipts.sort((a, b) => new Date(a.transactionDate) - new Date(b.transactionDate));
@@ -1092,6 +1153,32 @@
             const isGas = r.receiptType === "Gas Station" || 
                           r.documentType === "FuelReceipts" || 
                           (r.itemArray && r.itemArray.some(i => ["800877", "800599"].includes(i.itemNumber)));
+            
+            // Payments
+            if (r.tenderArray && Array.isArray(r.tenderArray)) {
+                r.tenderArray.forEach(t => {
+                    const method = t.tenderDescription || "Unknown";
+                    const amount = t.amountTender || 0;
+                    
+                    if (!paymentStats.has(method)) {
+                        paymentStats.set(method, { total: 0, count: 0, gasSpend: 0, merchSpend: 0, yearly: {} });
+                    }
+                    const stats = paymentStats.get(method);
+                    stats.total += amount;
+                    stats.count++;
+                    
+                    if (isGas) {
+                        stats.gasSpend += amount;
+                    } else {
+                        stats.merchSpend += amount;
+                    }
+
+                    if (!stats.yearly[yearKey]) stats.yearly[yearKey] = { total: 0, gas: 0, merch: 0 };
+                    stats.yearly[yearKey].total += amount;
+                    if (isGas) stats.yearly[yearKey].gas += amount;
+                    else stats.yearly[yearKey].merch += amount;
+                });
+            }
             
             if (isGas) {
                 gasSpent += total;
@@ -1314,6 +1401,7 @@
         renderDiscountsTab(totalSaved, discountCount);
         renderRefundsTab(globalReturns, globalAdjustments, totalSpent, refundsByDept);
         renderGasTab(gasSpent, gasGallons, gasPriceSum, gasVisits, gasLocations, gasMonthlySpend);
+        renderPaymentsTab(paymentStats);
         renderPriceAnalysisTab();
     }
 
@@ -1972,23 +2060,30 @@
     }
 
     // --- CHART HELPER ---
-    function createChart(id, type, data) {
+    function createChart(id, type, data, customOptions = {}) {
         const ctx = document.getElementById(id).getContext('2d');
         if (charts[id]) charts[id].destroy();
+        
+        const defaultOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: type === 'doughnut' || type === 'pie' || customOptions.showLegend }
+            },
+            scales: type !== 'doughnut' ? {
+                y: { beginAtZero: true }
+            } : {}
+        };
+
+        const options = { ...defaultOptions, ...customOptions };
+        if (customOptions.scales) {
+             options.scales = { ...defaultOptions.scales, ...customOptions.scales };
+        }
         
         charts[id] = new Chart(ctx, {
             type: type,
             data: data,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: type === 'doughnut' || type === 'pie' }
-                },
-                scales: type !== 'doughnut' ? {
-                    y: { beginAtZero: true }
-                } : {}
-            }
+            options: options
         });
     }
 
@@ -2235,6 +2330,117 @@
                 backgroundColor: '#ef4444'
             }]
         });
+    }
+
+    function renderPaymentsTab(paymentStats) {
+        const methods = Array.from(paymentStats.entries());
+        
+        // 1. KPI Cards
+        const totalPayments = methods.reduce((sum, [k,v]) => sum + v.total, 0);
+        const topMethod = methods.sort((a,b) => b[1].total - a[1].total)[0];
+        
+        document.getElementById('pay-total').textContent = formatMoney(totalPayments);
+        document.getElementById('pay-methodCount').textContent = methods.length;
+        
+        if (topMethod) {
+            document.getElementById('pay-topMethod').textContent = topMethod[0];
+            document.getElementById('pay-topMethodAmt').textContent = formatMoney(topMethod[1].total);
+        }
+
+        // Calculate Rewards
+        let totalRewards = 0;
+        methods.forEach(([name, stats]) => {
+            let reward = 0;
+            if (name.toUpperCase().includes('COSTCO VISA')) {
+                reward += (stats.gasSpend * 0.04);
+                reward += (stats.merchSpend * 0.02);
+            } else {
+                reward += (stats.total * 0.01); // Generic 1%
+            }
+            stats.estimatedReward = reward;
+            totalRewards += reward;
+        });
+        
+        document.getElementById('pay-citiRewards').textContent = formatMoney(totalRewards);
+
+        // 2. Charts
+        // Pie Chart: Spend by Method
+        const sortedMethods = methods.sort((a,b) => b[1].total - a[1].total);
+        createChart('payMethodChart', 'doughnut', {
+            labels: sortedMethods.map(m => m[0]),
+            datasets: [{
+                data: sortedMethods.map(m => m[1].total),
+                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+            }]
+        });
+
+        // Stacked Bar: History
+        const years = new Set();
+        methods.forEach(([_, s]) => Object.keys(s.yearly).forEach(y => years.add(y)));
+        const sortedYears = Array.from(years).sort();
+
+        const datasets = sortedMethods.slice(0, 5).map((m, i) => {
+            const color = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][i % 5];
+            return {
+                label: m[0],
+                data: sortedYears.map(y => m[1].yearly[y] ? m[1].yearly[y].total : 0),
+                backgroundColor: color
+            };
+        });
+
+        createChart('payHistoryChart', 'bar', {
+            labels: sortedYears,
+            datasets: datasets
+        }, {
+            showLegend: true,
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true }
+            }
+        });
+
+        // 3. Table
+        const tbody = document.querySelector('#paymentsTable tbody');
+        let tableHtml = '';
+        
+        sortedMethods.forEach(([name, stats]) => {
+            // Row for total
+            const pct = totalPayments ? (stats.total / totalPayments) * 100 : 0;
+            tableHtml += `
+                <tr style="background: rgba(128,128,128,0.1); font-weight:bold">
+                    <td>${name} (Total)</td>
+                    <td>All Time</td>
+                    <td class="money">${formatMoney(stats.total)}</td>
+                    <td class="money">${formatMoney(stats.estimatedReward)}</td>
+                    <td>${pct.toFixed(1)}%</td>
+                </tr>
+            `;
+            
+            // Rows for years
+            Object.keys(stats.yearly).sort().reverse().forEach(y => {
+                const yStats = stats.yearly[y];
+                // Calculate yearly reward
+                let yReward = 0;
+                if (name.toUpperCase().includes('COSTCO VISA')) {
+                    yReward += (yStats.gas * 0.04);
+                    yReward += (yStats.merch * 0.02);
+                } else {
+                    yReward += (yStats.total * 0.01);
+                }
+                
+                tableHtml += `
+                    <tr>
+                        <td style="padding-left: 20px;">↳ ${name}</td>
+                        <td>${y}</td>
+                        <td class="money">${formatMoney(yStats.total)}</td>
+                        <td class="money">${formatMoney(yReward)}</td>
+                        <td>-</td>
+                    </tr>
+                `;
+            });
+        });
+        
+        tbody.innerHTML = tableHtml;
     }
 </script>
 </body>
