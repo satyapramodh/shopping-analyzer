@@ -390,6 +390,30 @@
                 </div>
             </div>
 
+            <!-- Financials Grid -->
+            <div class="grid grid-4" style="margin-top: 20px;">
+                <div class="card" style="border-left: 4px solid var(--success-color);">
+                    <h3>Discounts</h3>
+                    <div class="value" id="pd-discountTotal" style="color:var(--success-color)">$0.00</div>
+                    <div class="sub" id="pd-discountCount">0 Times</div>
+                </div>
+                <div class="card" style="border-left: 4px solid var(--danger-color);">
+                    <h3>Refunds</h3>
+                    <div class="value" id="pd-refundTotal" style="color:var(--danger-color)">$0.00</div>
+                    <div class="sub" id="pd-refundCount">0 Returned</div>
+                </div>
+                <div class="card">
+                    <h3>Net Spend</h3>
+                    <div class="value" id="pd-netSpend">$0.00</div>
+                    <div class="sub">Total - Discounts</div>
+                </div>
+                <div class="card">
+                    <h3>Effective Unit Price</h3>
+                    <div class="value" id="pd-effectivePrice">$0.00</div>
+                    <div class="sub">Net / (Bought - Returned)</div>
+                </div>
+            </div>
+
             <div class="grid" style="margin-top: 20px;">
                 <div class="card">
                     <h3>Price History</h3>
@@ -417,6 +441,28 @@
                         <tr><td>Price Change</td><td id="pd-priceChange" class="money">-</td></tr>
                     </table>
                 </div>
+            </div>
+
+            <!-- Spend Analysis Charts -->
+            <div class="grid" style="margin-top: 20px;">
+                <div class="card">
+                    <h3>Annual Spend</h3>
+                    <div class="chart-container">
+                        <canvas id="pd-yearSpendChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Cumulative Spend</h3>
+                    <div class="chart-container">
+                        <canvas id="pd-cumulativeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transaction History -->
+            <div class="card" style="margin-top: 20px;">
+                <h3>Transaction History</h3>
+                <div id="pd-transactionsList" style="margin-top:15px;"></div>
             </div>
             
             <div class="card" style="margin-top: 20px;">
@@ -819,6 +865,8 @@
     let discountMap = new Map(); // Key: TargetItemID, Value: { id, totalSaved, count }
     let gasGrades = new Map(); // Key: "YYYY-MM" -> { pSpend:0, pGal:0, rSpend:0, rGal:0 }
     let charts = {}; // Store chart instances
+    let globalReturns = [];
+    let globalAdjustments = [];
     
     // --- SORTING ---
     document.addEventListener('DOMContentLoaded', () => {
@@ -1000,8 +1048,8 @@
         const yearlySubtotal = {};
         
         // Refund Analysis
-        const returnsList = [];
-        const adjustmentsList = [];
+        globalReturns = [];
+        globalAdjustments = [];
         const purchaseHistory = new Map(); // ItemID -> [{date, price, unit, warehouse}]
         const refundsByDept = {}; // DeptID -> { amount, count }
 
@@ -1207,7 +1255,7 @@
 
                         if (isReturn) {
                             const p = matchIndex >= 0 ? history[matchIndex] : { date: null, price: 0 };
-                            returnsList.push({
+                            globalReturns.push({
                                 name: i.itemDescription01 || "Unknown",
                                 id: id,
                                 returnDate: date,
@@ -1232,7 +1280,7 @@
                             // Price Adjustment
                             // Try to find what item this belongs to (most recent purchase)
                             const p = history.length > 0 ? history[history.length - 1] : null;
-                            adjustmentsList.push({
+                            globalAdjustments.push({
                                 name: i.itemDescription01 || "Unknown",
                                 id: id,
                                 date: date,
@@ -1264,7 +1312,7 @@
         renderAnalysisCharts(dowCounts, hourCounts, warehouseStats);
         renderRecurringAnalysis();
         renderDiscountsTab(totalSaved, discountCount);
-        renderRefundsTab(returnsList, adjustmentsList, totalSpent, refundsByDept);
+        renderRefundsTab(globalReturns, globalAdjustments, totalSpent, refundsByDept);
         renderGasTab(gasSpent, gasGallons, gasPriceSum, gasVisits, gasLocations, gasMonthlySpend);
         renderPriceAnalysisTab();
     }
@@ -1577,6 +1625,37 @@
         document.getElementById('pd-total').textContent = formatMoney(item.totalSpent);
         document.getElementById('pd-link').href = `https://www.costco.com/s?keyword=${item.id}`;
 
+        // --- Financials ---
+        const disc = discountMap.get(id);
+        const discAmount = disc ? disc.totalSaved : 0;
+        const discCount = disc ? disc.count : 0;
+
+        const itemReturns = globalReturns.filter(r => r.id === id);
+        const itemAdjs = globalAdjustments.filter(r => r.id === id);
+        const refundAmount = itemReturns.reduce((s,r)=>s+r.amount,0) + itemAdjs.reduce((s,a)=>s+a.amount,0);
+        const returnCount = itemReturns.reduce((s,r)=>s+r.unit,0);
+
+        // item.totalSpent is already net of refunds (since refunds are negative amounts in item line)
+        // But it is NOT net of discounts (since discounts are separate lines)
+        // So Net Spend = item.totalSpent - discAmount
+        const netSpend = item.totalSpent - discAmount;
+        
+        // Effective Unit Price
+        // Total Units Bought (Gross) - Returned Units
+        // item.count is Net Units (bought - returned) because unit is negative in refund
+        const netUnits = item.count; 
+        const effectivePrice = netUnits > 0 ? netSpend / netUnits : 0;
+
+        document.getElementById('pd-discountTotal').textContent = formatMoney(discAmount);
+        document.getElementById('pd-discountCount').textContent = `${discCount} Times`;
+        
+        document.getElementById('pd-refundTotal').textContent = formatMoney(refundAmount);
+        document.getElementById('pd-refundCount').textContent = `${returnCount} Returned`;
+        
+        document.getElementById('pd-netSpend').textContent = formatMoney(netSpend);
+        document.getElementById('pd-effectivePrice').textContent = formatMoney(effectivePrice);
+
+
         // Stats
         const prices = item.prices.sort((a,b) => a.date - b.date);
         if (prices.length) {
@@ -1656,6 +1735,111 @@
                 data: sortedVols.map(k => volMap[k]),
                 backgroundColor: '#10b981'
             }]
+        });
+
+        // --- NEW: Spend Analysis & History ---
+        
+        // 1. Group by Year
+        const byYear = {};
+        prices.forEach(p => {
+            const y = p.date.getFullYear();
+            if (!byYear[y]) byYear[y] = [];
+            byYear[y].push(p);
+        });
+        const years = Object.keys(byYear).sort();
+
+        // 2. Annual Spend Chart
+        createChart('pd-yearSpendChart', 'bar', {
+            labels: years,
+            datasets: [{
+                label: 'Annual Spend',
+                data: years.map(y => byYear[y].reduce((s, p) => s + (p.price * p.unit), 0)),
+                backgroundColor: '#3b82f6'
+            }]
+        });
+
+        // 3. Cumulative Spend Chart
+        let runningTotal = 0;
+        const cumulativeData = prices.map(p => {
+            runningTotal += (p.price * p.unit);
+            return runningTotal;
+        });
+        createChart('pd-cumulativeChart', 'line', {
+            labels: prices.map(p => p.date.toLocaleDateString()),
+            datasets: [{
+                label: 'Cumulative Spend',
+                data: cumulativeData,
+                borderColor: '#10b981',
+                fill: true,
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                tension: 0.1
+            }]
+        });
+
+        // 4. Transaction History List
+        const historyContainer = document.getElementById('pd-transactionsList');
+        historyContainer.innerHTML = '';
+
+        // Sort years desc for list
+        years.reverse().forEach((year, index) => {
+            const yearTrans = byYear[year];
+            // Sort desc within year
+            yearTrans.sort((a,b) => b.date - a.date);
+            
+            const yearTotal = yearTrans.reduce((sum, p) => sum + (p.price * p.unit), 0);
+            
+            const details = document.createElement('details');
+            if (index === 0) details.open = true; // Open most recent year
+            details.style.marginBottom = '10px';
+            details.style.border = '1px solid var(--border-color)';
+            details.style.borderRadius = '6px';
+            
+            const summary = document.createElement('summary');
+            summary.style.padding = '12px';
+            summary.style.cursor = 'pointer';
+            summary.style.fontWeight = 'bold';
+            summary.style.backgroundColor = 'rgba(128,128,128,0.05)';
+            summary.style.listStyle = 'none'; // Hide default marker in some browsers
+            summary.innerHTML = `
+                <span style="display:inline-block; width:20px;">▶</span> ${year} 
+                <span style="font-weight:normal; color:var(--text-muted); margin-left:10px;">(${yearTrans.length} purchases)</span> 
+                <span class="money" style="float:right">${formatMoney(yearTotal)}</span>
+            `;
+            
+            // Custom marker logic
+            details.addEventListener('toggle', () => {
+                summary.querySelector('span').textContent = details.open ? '▼' : '▶';
+            });
+
+            const table = document.createElement('table');
+            table.style.width = '100%';
+            table.style.borderTop = '1px solid var(--border-color)';
+            table.innerHTML = `
+                <thead>
+                    <tr style="font-size:0.85rem; color:var(--text-muted);">
+                        <th style="padding:8px 12px">Date</th>
+                        <th style="padding:8px 12px">Warehouse</th>
+                        <th style="padding:8px 12px; text-align:right">Unit Price</th>
+                        <th style="padding:8px 12px; text-align:center">Qty</th>
+                        <th style="padding:8px 12px; text-align:right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${yearTrans.map(p => `
+                        <tr>
+                            <td style="padding:8px 12px">${p.date.toLocaleDateString()}</td>
+                            <td style="padding:8px 12px">${p.warehouse}</td>
+                            <td style="padding:8px 12px; text-align:right" class="money">${formatMoney(p.price)}</td>
+                            <td style="padding:8px 12px; text-align:center">${p.unit}</td>
+                            <td style="padding:8px 12px; text-align:right" class="money">${formatMoney(p.price * p.unit)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            `;
+            
+            details.appendChild(summary);
+            details.appendChild(table);
+            historyContainer.appendChild(details);
         });
 
         // Location Table
