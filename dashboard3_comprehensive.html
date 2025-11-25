@@ -259,6 +259,7 @@
         <button class="tab-btn active" onclick="switchTab('overview')">Overview</button>
         <button class="tab-btn" onclick="switchTab('products')">Product Search</button>
         <button class="tab-btn" onclick="switchTab('categories')">Categories</button>
+        <button class="tab-btn" onclick="switchTab('discounts')">Discounts</button>
         <button class="tab-btn" onclick="switchTab('analysis')">Deep Analysis</button>
     </div>
 
@@ -433,46 +434,102 @@
             </div>
 
             <!-- Right: Category Detail -->
-            <div id="categoryDetailPanel" class="card hidden">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                    <h2 id="cat-title" style="margin:0">Category Name</h2>
-                    <div class="value" id="cat-total" style="font-size:1.5rem">$0.00</div>
+            <div id="categoryDetailPanel" class="card">
+                <div id="cat-placeholder" style="text-align:center; padding: 50px; color: var(--text-muted);">
+                    <h2 style="margin:0">Select a Department</h2>
+                    <p>Click on a department ID or row to view detailed analysis.</p>
                 </div>
+                <div id="cat-content" class="hidden">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                        <h2 id="cat-title" style="margin:0">Category Name</h2>
+                        <div class="value" id="cat-total" style="font-size:1.5rem">$0.00</div>
+                    </div>
 
-                <div class="grid">
-                    <div class="card">
-                        <h3>Monthly Spend</h3>
-                        <div class="chart-container" style="height:200px">
-                            <canvas id="cat-monthlyChart"></canvas>
+                    <div class="grid">
+                        <div class="card">
+                            <h3>Monthly Spend</h3>
+                            <div class="chart-container" style="height:200px">
+                                <canvas id="cat-monthlyChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <h3>Top Products</h3>
+                            <div class="table-container" style="max-height:200px">
+                                <table id="cat-topProductsTable">
+                                    <thead><tr><th>Item</th><th class="money">Spend</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                    <div class="card">
-                        <h3>Top Products</h3>
-                        <div class="table-container" style="max-height:200px">
-                            <table id="cat-topProductsTable">
-                                <thead><tr><th>Item</th><th class="money">Spend</th></tr></thead>
+
+                    <div class="card" style="margin-top:20px">
+                        <h3>All Products in Category</h3>
+                        <div class="table-container">
+                            <table id="cat-allProductsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>ID</th>
+                                        <th class="money">Total Spend</th>
+                                        <th>Count</th>
+                                        <th class="money">Avg Price</th>
+                                    </tr>
+                                </thead>
                                 <tbody></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
 
-                <div class="card" style="margin-top:20px">
-                    <h3>All Products in Category</h3>
-                    <div class="table-container">
-                        <table id="cat-allProductsTable">
-                            <thead>
-                                <tr>
-                                    <th>Item</th>
-                                    <th>ID</th>
-                                    <th class="money">Total Spend</th>
-                                    <th>Count</th>
-                                    <th class="money">Avg Price</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
+    <!-- TAB: DISCOUNTS -->
+    <div id="discounts" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card">
+                <h3>Total Saved</h3>
+                <div class="value" id="disc-totalSaved">$0.00</div>
+                <div class="sub">All time discounts</div>
+            </div>
+            <div class="card">
+                <h3>Discount Count</h3>
+                <div class="value" id="disc-count">0</div>
+                <div class="sub">Number of coupons applied</div>
+            </div>
+            <div class="card">
+                <h3>Avg Discount</h3>
+                <div class="value" id="disc-avg">$0.00</div>
+            </div>
+            <div class="card">
+                <h3>Top Saver</h3>
+                <div class="value" id="disc-topItem" style="font-size:1.2rem">-</div>
+                <div class="sub" id="disc-topItemAmt">$0.00 saved</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Top Products by Savings</h3>
+                <div class="table-container">
+                    <table id="topDiscountsTable">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th class="money">Total Saved</th>
+                                <th>Times Discounted</th>
+                                <th class="money">Avg Savings</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Discount Frequency</h3>
+                <div class="chart-container">
+                    <canvas id="discountChart"></canvas>
                 </div>
             </div>
         </div>
@@ -543,11 +600,12 @@
     let filteredData = [];
     let itemMap = new Map(); // Key: ItemID, Value: ItemStats
     let deptMap = new Map(); // Key: DeptID, Value: { id, name, spend, items: Set(itemId), monthly: {} }
+    let discountMap = new Map(); // Key: TargetItemID, Value: { id, totalSaved, count }
     let charts = {}; // Store chart instances
     
     // --- SORTING ---
     document.addEventListener('DOMContentLoaded', () => {
-        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable'];
+        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable', 'topDiscountsTable'];
         tables.forEach(id => makeTableSortable(id));
     });
 
@@ -615,6 +673,10 @@
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
         document.getElementById(tabId).classList.add('active');
         document.querySelector(`button[onclick="switchTab('${tabId}')"]`).classList.add('active');
+        // Clear category detail panel when switching tabs
+        if (tabId === 'categories') {
+            showCategoryDetail(null);
+        }
     };
 
     // --- DATA LOADING ---
@@ -699,9 +761,13 @@
         let gasGallons = 0;
         let rewardsEligible = 0;
         let itemCount = 0;
+        let totalSaved = 0;
+        let discountCount = 0;
         
         itemMap.clear();
         deptMap.clear();
+        discountMap.clear();
+
         const monthlySpend = {};
         const deptSpend = {};
         const dowCounts = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0}; // Sun-Sat
@@ -756,6 +822,31 @@
                     
                     const amount = i.amount || 0;
                     const unit = i.unit || 1; // Default to 1 if missing
+                    const desc = i.itemDescription01 || "";
+
+                    // Check for Discount Pattern
+                    // Pattern: Negative amount AND description starts with "/" followed by item ID
+                    if (amount < 0 && desc.trim().startsWith('/')) {
+                        const targetId = desc.replace('/', '').trim();
+                        const saved = Math.abs(amount);
+                        
+                        totalSaved += saved;
+                        discountCount++;
+
+                        if (!discountMap.has(targetId)) {
+                            discountMap.set(targetId, {
+                                id: targetId,
+                                totalSaved: 0,
+                                count: 0
+                            });
+                        }
+                        const dStats = discountMap.get(targetId);
+                        dStats.totalSaved += saved;
+                        dStats.count++;
+                        
+                        // We don't count discounts as "items" for itemCount
+                        return; 
+                    }
                     
                     itemCount += unit;
 
@@ -821,6 +912,7 @@
         renderCategoryTab(); // New Category Tab
         renderAnalysisCharts(dowCounts, hourCounts, warehouseStats);
         renderRecurringAnalysis();
+        renderDiscountsTab(totalSaved, discountCount);
     }
 
     // --- CATEGORY TAB LOGIC ---
@@ -828,9 +920,12 @@
         const tbody = document.querySelector('#categoryListTable tbody');
         const sortedDepts = Array.from(deptMap.values()).sort((a,b) => b.spend - a.spend);
 
+        // Clear detail panel when rendering tab
+        showCategoryDetail(null);
+
         tbody.innerHTML = sortedDepts.map(d => `
             <tr onclick="showCategoryDetail('${d.id}')" style="cursor:pointer">
-                <td>${d.id}</td>
+                <td title="View Details" style="color:var(--accent-color); text-decoration:underline; font-weight:bold;">${d.id}</td>
                 <td onclick="event.stopPropagation()">
                     <input type="text" value="${d.name}" 
                         onchange="updateCategoryName('${d.id}', this.value)"
@@ -854,28 +949,52 @@
     }
 
     window.updateCategoryName = (id, newName) => {
-        if (deptMap.has(id)) {
-            deptMap.get(id).name = newName;
+        let d = deptMap.get(id);
+        if (!d && !isNaN(id)) d = deptMap.get(Number(id));
+
+        if (d) {
+            d.name = newName;
             // Refresh detail view if open
             const title = document.getElementById('cat-title');
-            if (title && title.getAttribute('data-id') === id) {
+            if (title && title.getAttribute('data-id') == id) {
                 title.textContent = newName;
             }
         }
     };
 
     window.showCategoryDetail = (id) => {
-        const d = deptMap.get(id);
-        if (!d) return;
-
         const panel = document.getElementById('categoryDetailPanel');
-        panel.classList.remove('hidden');
+        const placeholder = document.getElementById('cat-placeholder');
+        const content = document.getElementById('cat-content');
+        if (!id) {
+            // Show placeholder, hide content
+            if (placeholder) placeholder.style.display = '';
+            if (content) content.classList.add('hidden');
+            // Clear content fields
+            document.getElementById('cat-title').textContent = 'Category Name';
+            document.getElementById('cat-title').removeAttribute('data-id');
+            document.getElementById('cat-total').textContent = '$0.00';
+            document.querySelector('#cat-topProductsTable tbody').innerHTML = '';
+            document.querySelector('#cat-allProductsTable tbody').innerHTML = '';
+            // Clear chart
+            if (window.charts && window.charts['cat-monthlyChart']) {
+                window.charts['cat-monthlyChart'].destroy();
+                delete window.charts['cat-monthlyChart'];
+            }
+            return;
+        }
         
+        let d = deptMap.get(id);
+        if (!d && !isNaN(id)) d = deptMap.get(Number(id));
+        
+        if (!d) return;
+        // Hide placeholder, show content
+        if (placeholder) placeholder.style.display = 'none';
+        if (content) content.classList.remove('hidden');
         const title = document.getElementById('cat-title');
         title.textContent = d.name;
         title.setAttribute('data-id', id);
         document.getElementById('cat-total').textContent = formatMoney(d.spend);
-
         // Monthly Chart
         const sortedMonths = Object.keys(d.monthly).sort();
         createChart('cat-monthlyChart', 'bar', {
@@ -886,12 +1005,10 @@
                 backgroundColor: '#3b82f6'
             }]
         });
-
         // Top Products Table
         const topItems = Array.from(d.items)
             .map(itemId => itemMap.get(itemId))
             .sort((a,b) => b.totalSpent - a.totalSpent);
-
         const topTbody = document.querySelector('#cat-topProductsTable tbody');
         topTbody.innerHTML = topItems.slice(0, 5).map(i => `
             <tr>
@@ -899,7 +1016,6 @@
                 <td class="money">${formatMoney(i.totalSpent)}</td>
             </tr>
         `).join('');
-
         // All Products Table
         const allTbody = document.querySelector('#cat-allProductsTable tbody');
         allTbody.innerHTML = topItems.map(i => `
@@ -1235,6 +1351,54 @@
 
     // Initialize Theme
     updateChartsTheme();
+
+    function renderDiscountsTab(totalSaved, count) {
+        document.getElementById('disc-totalSaved').textContent = formatMoney(totalSaved);
+        document.getElementById('disc-count').textContent = count;
+        document.getElementById('disc-avg').textContent = count ? formatMoney(totalSaved / count) : '$0.00';
+
+        const discounts = Array.from(discountMap.values());
+        
+        // Resolve names
+        discounts.forEach(d => {
+            const item = itemMap.get(d.id);
+            d.name = item ? item.name : `Unknown Item (${d.id})`;
+        });
+
+        // Sort by total saved
+        discounts.sort((a,b) => b.totalSaved - a.totalSaved);
+
+        // Top Saver
+        if (discounts.length > 0) {
+            document.getElementById('disc-topItem').textContent = discounts[0].name;
+            document.getElementById('disc-topItemAmt').textContent = `${formatMoney(discounts[0].totalSaved)} saved`;
+        }
+
+        // Table
+        const tbody = document.querySelector('#topDiscountsTable tbody');
+        tbody.innerHTML = discounts.map(d => `
+            <tr>
+                <td>
+                    <div style="font-weight:bold">${d.name}</div>
+                    <div style="font-size:0.8em; color:var(--text-muted)">#${d.id}</div>
+                </td>
+                <td class="money">${formatMoney(d.totalSaved)}</td>
+                <td>${d.count}</td>
+                <td class="money">${formatMoney(d.totalSaved / d.count)}</td>
+            </tr>
+        `).join('');
+
+        // Chart (Top 10 by Frequency)
+        const topFreq = [...discounts].sort((a,b) => b.count - a.count).slice(0, 10);
+        createChart('discountChart', 'bar', {
+            labels: topFreq.map(d => d.name.substring(0, 20) + (d.name.length>20?'...':'')),
+            datasets: [{
+                label: 'Times Discounted',
+                data: topFreq.map(d => d.count),
+                backgroundColor: '#ef4444'
+            }]
+        });
+    }
 
 </script>
 </body>
