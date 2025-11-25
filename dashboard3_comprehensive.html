@@ -422,7 +422,7 @@
                 <h3>Purchase Locations</h3>
                 <div class="table-container">
                     <table id="pd-locationTable">
-                        <thead><tr><th>Warehouse</th><th>Count</th><th class="money">Total Spent</th><th class="money">Avg Price</th></tr></thead>
+                        <thead><tr><th>Warehouse</th><th>Count</th><th class="money">Total Spent</th><th class="money">Avg Price</th><th>Last Purchase</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -837,7 +837,7 @@
 
         data.forEach(r => {
             if (r.transactionDate) years.add(r.transactionDate.substring(0, 4));
-            if (r.warehouseName) locations.add(r.warehouseName);
+            if (r.warehouseName) locations.add(normalizeLocation(r.warehouseName));
         });
 
         // Populate Year Filter
@@ -871,7 +871,7 @@
 
         filteredData = rawData.filter(r => {
             const y = r.transactionDate ? r.transactionDate.substring(0, 4) : 'Unknown';
-            const l = r.warehouseName || 'Unknown';
+            const l = normalizeLocation(r.warehouseName);
             return selectedYears.includes(y) && selectedLocs.includes(l);
         });
 
@@ -912,7 +912,7 @@
             const date = new Date(r.transactionDate);
             const monthKey = r.transactionDate.substring(0, 7); // YYYY-MM
             const yearKey = r.transactionDate.substring(0, 4);
-            const warehouse = r.warehouseName || "Unknown";
+            const warehouse = normalizeLocation(r.warehouseName);
 
             // Overview Stats
             totalSpent += total;
@@ -1057,6 +1057,7 @@
                         item.prices.push({
                             date: date,
                             price: amount / unit,
+                            unit: unit,
                             warehouse: warehouse
                         });
                     }
@@ -1268,6 +1269,10 @@
 
     // --- RENDERING HELPERS ---
     const formatMoney = (num) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+    const normalizeLocation = (name) => {
+        if (!name) return "Unknown";
+        return name.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    };
 
     function renderOverviewCharts(monthly, dept) {
         // Monthly Chart
@@ -1391,8 +1396,15 @@
             // Frequency
             if (prices.length > 1) {
                 const daysSpan = (prices[prices.length-1].date - prices[0].date) / (1000 * 60 * 60 * 24);
-                const avgDays = daysSpan / (prices.length - 1);
-                document.getElementById('pd-frequency').textContent = `Every ~${Math.round(avgDays)} days`;
+                
+                let consumedUnits = 0;
+                for (let k = 0; k < prices.length - 1; k++) {
+                    consumedUnits += (prices[k].unit || 1);
+                }
+                if (consumedUnits === 0) consumedUnits = 1;
+
+                const avgDaysPerUnit = daysSpan / consumedUnits;
+                document.getElementById('pd-frequency').textContent = `Every ~${Math.round(avgDaysPerUnit)} days/unit`;
             } else {
                 document.getElementById('pd-frequency').textContent = "One-time purchase";
             }
@@ -1440,10 +1452,10 @@
         prices.forEach(p => {
             const k = p.date.toISOString().substring(0, 7); // YYYY-MM
             if (volMap.hasOwnProperty(k)) {
-                volMap[k] += 1;
+                volMap[k] += (p.unit || 1);
             } else {
                 // Handle edge case if date range logic missed something or single date
-                volMap[k] = (volMap[k] || 0) + 1;
+                volMap[k] = (volMap[k] || 0) + (p.unit || 1);
             }
         });
         const sortedVols = Object.keys(volMap).sort();
@@ -1459,18 +1471,30 @@
         // Location Table
         const locStats = {};
         prices.forEach(p => {
-            if (!locStats[p.warehouse]) locStats[p.warehouse] = { count: 0, spend: 0 };
-            locStats[p.warehouse].count++;
-            locStats[p.warehouse].spend += p.price; // Approx
+            const key = p.warehouse || "Unknown";
+            if (!locStats[key]) {
+                locStats[key] = { 
+                    name: key,
+                    count: 0, 
+                    spend: 0,
+                    lastDate: p.date
+                };
+            }
+            locStats[key].count++;
+            locStats[key].spend += p.price; // Approx
+            if (p.date > locStats[key].lastDate) {
+                locStats[key].lastDate = p.date;
+            }
         });
 
         const locTbody = document.querySelector('#pd-locationTable tbody');
-        locTbody.innerHTML = Object.entries(locStats).map(([name, s]) => `
+        locTbody.innerHTML = Object.entries(locStats).map(([key, s]) => `
             <tr>
-                <td>${name}</td>
+                <td>${s.name}</td>
                 <td>${s.count}</td>
                 <td class="money">${formatMoney(s.spend)}</td>
                 <td class="money">${formatMoney(s.spend/s.count)}</td>
+                <td>${s.lastDate.toLocaleDateString()}</td>
             </tr>
         `).join('');
     };
@@ -1529,27 +1553,35 @@
         const tbody = document.querySelector('#recurringTable tbody');
         
         const rows = items.map(i => {
-            const dates = i.prices.map(p => p.date).sort((a,b) => a - b);
-            if (dates.length < 2) return null;
+            const purchases = i.prices.sort((a,b) => a.date - b.date);
+            if (purchases.length < 2) return null;
 
-            const first = dates[0];
-            const last = dates[dates.length - 1];
+            const first = purchases[0].date;
+            const last = purchases[purchases.length - 1].date;
             const daysSpan = (last - first) / (1000 * 60 * 60 * 24);
-            const avgDays = daysSpan / (dates.length - 1);
             
+            let consumedUnits = 0;
+            for (let k = 0; k < purchases.length - 1; k++) {
+                consumedUnits += (purchases[k].unit || 1);
+            }
+            if (consumedUnits === 0) consumedUnits = 1;
+
+            const avgDaysPerUnit = daysSpan / consumedUnits;
+            
+            const lastUnits = purchases[purchases.length - 1].unit || 1;
             const nextDate = new Date(last);
-            nextDate.setDate(nextDate.getDate() + avgDays);
+            nextDate.setDate(nextDate.getDate() + (avgDaysPerUnit * lastUnits));
             
             return {
                 ...i,
-                avgDays,
+                avgDaysPerUnit,
                 lastDate: last,
                 nextDate
             };
         }).filter(Boolean);
 
         // Sort by frequency (lowest avg days)
-        rows.sort((a,b) => a.avgDays - b.avgDays);
+        rows.sort((a,b) => a.avgDaysPerUnit - b.avgDaysPerUnit);
 
         tbody.innerHTML = rows.map(r => `
             <tr>
@@ -1558,7 +1590,7 @@
                     <div style="font-size:0.8em; color:var(--text-muted)">#${r.id}</div>
                 </td>
                 <td>${r.count}</td>
-                <td class="money">${r.avgDays.toFixed(1)} days</td>
+                <td class="money">${r.avgDaysPerUnit.toFixed(1)} days/unit</td>
                 <td>${r.lastDate.toLocaleDateString()}</td>
                 <td>${r.nextDate.toLocaleDateString()}</td>
             </tr>
