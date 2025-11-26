@@ -386,9 +386,50 @@ async function downloadOnlineOrders() {
     
     console.log(`Got ${detailedOrders.length} detailed orders, saving.`);
     
+    // Sanitize PII
+    const sanitizedOrders = detailedOrders.map(o => {
+        const clean = { ...o };
+        // Remove PII fields
+        delete clean.firstName;
+        delete clean.lastName;
+        delete clean.line1;
+        delete clean.line2;
+        delete clean.line3;
+        delete clean.emailAddress;
+        delete clean.phoneNumber;
+        delete clean.membershipNumber;
+        delete clean.postalCode;
+        
+        // Clean Payment
+        if (clean.orderPayment) {
+            clean.orderPayment = { ...clean.orderPayment };
+            delete clean.orderPayment.nameOnCard;
+        }
+        
+        // Clean ShipTo
+        if (clean.shipToAddress && Array.isArray(clean.shipToAddress)) {
+            clean.shipToAddress = clean.shipToAddress.map(addr => {
+                const a = { ...addr };
+                delete a.firstName;
+                delete a.lastName;
+                delete a.line1;
+                delete a.line2;
+                delete a.line3;
+                delete a.emailAddress;
+                delete a.phoneNumber;
+                delete a.giftToFirstName;
+                delete a.giftToLastName;
+                delete a.giftFromName;
+                delete a.postalCode;
+                return a;
+            });
+        }
+        return clean;
+    });
+
     var a = document.createElement('a');
     a.download = `costco-online-orders-${endDate.toISOString()}.json`;
-    a.href = window.URL.createObjectURL(new Blob([JSON.stringify(detailedOrders, null, 2)], {type: 'text/plain'}));
+    a.href = window.URL.createObjectURL(new Blob([JSON.stringify(sanitizedOrders, null, 2)], {type: 'text/plain'}));
     a.target = '_blank';
     document.body.appendChild(a);
     a.click();

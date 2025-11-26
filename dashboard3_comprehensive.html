@@ -242,15 +242,26 @@
         <h3 style="margin-bottom: 10px;">Filters</h3>
         <div class="controls" style="align-items: flex-start;">
             <div>
-                <label style="display:block; margin-bottom:5px; font-size:0.85rem;">Year(s)</label>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <label style="font-size:0.85rem;">Year(s)</label>
+                    <div style="display:flex; gap:2px;">
+                        <button id="yearSelectAll" style="padding:2px 6px; font-size:0.7rem; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color);">All</button>
+                        <button id="yearDeselectAll" style="padding:2px 6px; font-size:0.7rem; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color);">None</button>
+                    </div>
+                </div>
                 <div id="yearFilter" class="multi-select" style="width: 150px;"></div>
             </div>
             <div>
-                <label style="display:block; margin-bottom:5px; font-size:0.85rem;">Location(s)</label>
-                <div id="locationFilter" class="multi-select" style="width: 250px;"></div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <label style="font-size:0.85rem;">Location(s)</label>
+                    <div style="display:flex; gap:2px;">
+                        <button id="locSelectAll" style="padding:2px 6px; font-size:0.7rem; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color);">All</button>
+                        <button id="locDeselectAll" style="padding:2px 6px; font-size:0.7rem; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color);">None</button>
+                    </div>
+                </div>
+                <div id="locationFilter" class="multi-select" style="width: 300px; height: 200px;"></div>
             </div>
             <button id="applyFiltersBtn" style="margin-top: 25px;">Apply Filters</button>
-            <button id="resetFiltersBtn" style="margin-top: 25px; background: var(--text-muted);">Reset</button>
         </div>
     </div>
 
@@ -925,6 +936,8 @@
     // --- STATE ---
     let rawData = [];
     let filteredData = [];
+    let warehouseIdMap = new Map(); // Key: ID, Value: { state, city, name }
+    let warehouseNameMap = new Map(); // Key: NormName, Value: { state, city, name }
     let itemMap = new Map(); // Key: ItemID, Value: ItemStats
     let deptMap = new Map(); // Key: DeptID, Value: { id, name, spend, items: Set(itemId), monthly: {} }
     let discountMap = new Map(); // Key: TargetItemID, Value: { id, totalSaved, count }
@@ -1016,11 +1029,28 @@
 
         document.getElementById('status').textContent = "Processing...";
         rawData = [];
-
+        
         for (let file of files) {
             const text = await file.text();
             try {
                 const json = JSON.parse(text);
+
+                // Check for Warehouse List
+                if (json.warehouses && Array.isArray(json.warehouses)) {
+                    json.warehouses.forEach(w => {
+                        const state = w.address ? (w.address.territory || "Unknown") : "Unknown";
+                        const city = w.address ? (w.address.city || "Unknown") : "Unknown";
+                        const name = (w.name && w.name.length > 0) ? w.name[0].value : "Unknown";
+                        
+                        const meta = { state, city, name, id: w.warehouseId };
+                        
+                        if (w.warehouseId) warehouseIdMap.set(String(w.warehouseId), meta);
+                        if (name !== "Unknown") warehouseNameMap.set(normalizeLocation(name), meta);
+                    });
+                    console.log(`Loaded ${warehouseIdMap.size} warehouse locations.`);
+                    continue;
+                }
+
                 if (Array.isArray(json)) {
                     const normalized = json.map(r => normalizeRecord(r)).filter(r => r);
                     rawData = rawData.concat(normalized);
@@ -1114,13 +1144,46 @@
     }
 
     // --- FILTERING ---
+    
+    function getWarehouseMeta(r) {
+        // 1. Try ID
+        if (r.warehouseNumber) {
+            const id = String(r.warehouseNumber);
+            if (warehouseIdMap.has(id)) return warehouseIdMap.get(id);
+        }
+        // 2. Try Name
+        if (r.warehouseName) {
+            const norm = normalizeLocation(r.warehouseName);
+            if (warehouseNameMap.has(norm)) return warehouseNameMap.get(norm);
+        }
+        // 3. Try Record's own state info
+        if (r.warehouseState) {
+            return { state: r.warehouseState, city: r.warehouseCity || "", name: r.warehouseName };
+        }
+        return null;
+    }
+
     function initFilters(data) {
         const years = new Set();
-        const locations = new Set();
+        const stateMap = {}; // State -> Set(LocationName)
 
         data.forEach(r => {
             if (r.transactionDate) years.add(r.transactionDate.substring(0, 4));
-            if (r.warehouseName) locations.add(normalizeLocation(r.warehouseName));
+            
+            if (r.warehouseName) {
+                const normName = normalizeLocation(r.warehouseName);
+                let state = "Other";
+                
+                if (r.isOnline || r.warehouseName === "Costco.com") {
+                    state = "Online";
+                } else {
+                    const meta = getWarehouseMeta(r);
+                    if (meta && meta.state) state = meta.state;
+                }
+                
+                if (!stateMap[state]) stateMap[state] = new Set();
+                stateMap[state].add(normName);
+            }
         });
 
         // Populate Year Filter
@@ -1132,30 +1195,85 @@
             yearContainer.appendChild(label);
         });
 
-        // Populate Location Filter
+        // Populate Location Filter (Hierarchical)
         const locContainer = document.getElementById('locationFilter');
         locContainer.innerHTML = '';
-        Array.from(locations).sort().forEach(l => {
-            const label = document.createElement('label');
-            label.innerHTML = `<input type="checkbox" value="${l}" checked> ${l}`;
-            locContainer.appendChild(label);
+        
+        const sortedStates = Object.keys(stateMap).sort();
+        
+        sortedStates.forEach(state => {
+            const stateDiv = document.createElement('div');
+            stateDiv.style.marginBottom = "5px";
+            
+            // State Header
+            const locations = Array.from(stateMap[state]).sort();
+            const header = document.createElement('div');
+            header.style.fontWeight = "bold";
+            header.style.fontSize = "0.85rem";
+            header.style.padding = "2px 5px";
+            header.style.background = "rgba(128,128,128,0.1)";
+            header.style.cursor = "pointer";
+            header.textContent = `${state} (${locations.length})`;
+            header.onclick = () => {
+                const content = stateDiv.querySelector('.state-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            };
+            stateDiv.appendChild(header);
+
+            // Locations
+            const content = document.createElement('div');
+            content.className = 'state-content';
+            content.style.paddingLeft = "10px";
+            
+            locations.forEach(l => {
+                const label = document.createElement('label');
+                // Value is composite key: State|Location
+                const val = `${state}|${l}`;
+                label.innerHTML = `<input type="checkbox" value="${val}" checked> ${l}`;
+                content.appendChild(label);
+            });
+            
+            stateDiv.appendChild(content);
+            locContainer.appendChild(stateDiv);
         });
     }
 
     document.getElementById('applyFiltersBtn').addEventListener('click', applyFilters);
-    document.getElementById('resetFiltersBtn').addEventListener('click', () => {
-        document.querySelectorAll('#yearFilter input, #locationFilter input').forEach(cb => cb.checked = true);
-        applyFilters();
+    
+    // Select/Deselect All Handlers
+    document.getElementById('yearSelectAll').addEventListener('click', () => {
+        document.querySelectorAll('#yearFilter input').forEach(cb => cb.checked = true);
+    });
+    document.getElementById('yearDeselectAll').addEventListener('click', () => {
+        document.querySelectorAll('#yearFilter input').forEach(cb => cb.checked = false);
+    });
+    
+    document.getElementById('locSelectAll').addEventListener('click', () => {
+        document.querySelectorAll('#locationFilter input').forEach(cb => cb.checked = true);
+    });
+    document.getElementById('locDeselectAll').addEventListener('click', () => {
+        document.querySelectorAll('#locationFilter input').forEach(cb => cb.checked = false);
     });
 
     function applyFilters() {
         const selectedYears = Array.from(document.querySelectorAll('#yearFilter input:checked')).map(cb => cb.value);
-        const selectedLocs = Array.from(document.querySelectorAll('#locationFilter input:checked')).map(cb => cb.value);
+        const selectedLocs = new Set(Array.from(document.querySelectorAll('#locationFilter input:checked')).map(cb => cb.value));
 
         filteredData = rawData.filter(r => {
             const y = r.transactionDate ? r.transactionDate.substring(0, 4) : 'Unknown';
-            const l = normalizeLocation(r.warehouseName);
-            return selectedYears.includes(y) && selectedLocs.includes(l);
+            
+            const normName = normalizeLocation(r.warehouseName);
+            let state = "Other";
+            if (r.isOnline || r.warehouseName === "Costco.com") {
+                state = "Online";
+            } else {
+                const meta = getWarehouseMeta(r);
+                if (meta && meta.state) state = meta.state;
+            }
+            
+            const key = `${state}|${normName}`;
+            
+            return selectedYears.includes(y) && selectedLocs.has(key);
         });
 
         processData(filteredData);

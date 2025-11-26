@@ -139,9 +139,16 @@ async function downloadGasReceipts() {
     var receipts = await listGasReceipts(startDateStr, endDateStr);
     console.log(`Got ${receipts.length} gas receipts, saving.`);
     
+    // Sanitize PII
+    const sanitizedReceipts = receipts.map(r => {
+        const clean = { ...r };
+        delete clean.membershipNumber;
+        return clean;
+    });
+
     var a = document.createElement('a');
     a.download = `costco-gas-${endDate.toISOString()}.json`;
-    a.href = window.URL.createObjectURL(new Blob([JSON.stringify(receipts, null, 2)], {type: 'text/plain'}));
+    a.href = window.URL.createObjectURL(new Blob([JSON.stringify(sanitizedReceipts, null, 2)], {type: 'text/plain'}));
     a.target = '_blank';
     document.body.appendChild(a);
     a.click();
