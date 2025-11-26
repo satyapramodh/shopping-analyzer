@@ -296,6 +296,11 @@
                 <div class="value" id="ov-refunds" style="color: #7c3aed;">$0.00</div>
                 <div class="sub" id="ov-refundCount">0 Returns</div>
             </div>
+            <div class="card" style="border-left: 4px solid #3b82f6;">
+                <h3>Online Spend</h3>
+                <div class="value" id="ov-onlineSpent" style="color: #3b82f6;">$0.00</div>
+                <div class="sub" id="ov-onlineCount">0 Orders</div>
+            </div>
         </div>
 
         <!-- Charts -->
@@ -930,7 +935,7 @@
     
     // --- SORTING ---
     document.addEventListener('DOMContentLoaded', () => {
-        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable', 'topDiscountsTable', 'rewardsTable', 'priceIncreaseTable', 'priceDecreaseTable', 'mostExpensiveTable', 'returnsTable', 'adjustmentsTable'];
+        const tables = ['topSpendersTable', 'mostFrequentTable', 'productTable', 'pd-locationTable', 'taxTable', 'recurringTable', 'topDiscountsTable', 'rewardsTable', 'priceIncreaseTable', 'priceDecreaseTable', 'mostExpensiveTable', 'returnsTable', 'adjustmentsTable', 'cat-allProductsTable', 'cat-topProductsTable', 'categoryListTable'];
         tables.forEach(id => makeTableSortable(id));
     });
 
@@ -1017,7 +1022,8 @@
             try {
                 const json = JSON.parse(text);
                 if (Array.isArray(json)) {
-                    rawData = rawData.concat(json);
+                    const normalized = json.map(r => normalizeRecord(r)).filter(r => r);
+                    rawData = rawData.concat(normalized);
                 }
             } catch (err) {
                 console.error("Error parsing file", err);
@@ -1027,8 +1033,85 @@
         // Initial Process
         initFilters(rawData);
         applyFilters();
-        document.getElementById('status').textContent = `Loaded ${rawData.length.toLocaleString()} receipts.`;
+        document.getElementById('status').textContent = `Loaded ${rawData.length.toLocaleString()} transactions.`;
     });
+
+    function normalizeRecord(r) {
+        // Online Order
+        if (r.orderHeaderId || r.orderNumber) {
+            // Skip cancelled orders if needed, or treat as 0
+            if (r.status === 'Cancelled') return null; 
+
+            // Check if this is the detailed format (has shipToAddress array)
+            if (r.shipToAddress && Array.isArray(r.shipToAddress)) {
+                const items = [];
+                r.shipToAddress.forEach(ship => {
+                    if (ship.orderLineItems) {
+                        ship.orderLineItems.forEach(i => {
+                            items.push({
+                                itemNumber: i.itemNumber,
+                                itemDescription01: i.itemDescription,
+                                amount: i.price * i.quantity, // Total line amount
+                                unit: i.quantity,
+                                unitPrice: i.price,
+                                itemDepartmentNumber: "Online",
+                                isOnline: true
+                            });
+                        });
+                    }
+                });
+
+                return {
+                    transactionDate: (r.orderPlacedDate || r.orderedDate || "").substring(0, 10),
+                    transactionDateTime: r.orderPlacedDate || r.orderedDate,
+                    warehouseName: "Costco.com",
+                    total: r.orderTotal || 0,
+                    subTotal: r.merchandiseTotal || r.orderTotal || 0,
+                    taxes: (r.uSTaxTotal1 || 0) + (r.foreignTaxTotal1 || 0),
+                    itemArray: items,
+                    isOnline: true,
+                    transactionType: "Sales"
+                };
+            }
+
+            // Fallback for old simple format
+            const total = r.orderTotal || 0;
+            const items = r.orderLineItems || [];
+            // Distribute total cost evenly among items since individual prices are missing
+            // This is an approximation but ensures total spend matches
+            const count = items.length || 1;
+            const avgPrice = total / count;
+
+            return {
+                transactionDate: (r.orderPlacedDate || r.orderedDate || "").substring(0, 10),
+                transactionDateTime: r.orderPlacedDate || r.orderedDate,
+                warehouseName: "Costco.com",
+                total: total,
+                subTotal: total, // Approx
+                taxes: 0, // Unknown in this feed
+                itemArray: items.map(i => ({
+                    itemNumber: i.itemNumber,
+                    itemDescription01: i.itemDescription,
+                    amount: avgPrice, 
+                    unit: 1,
+                    itemDepartmentNumber: "Online",
+                    isOnline: true
+                })),
+                isOnline: true,
+                transactionType: "Sales"
+            };
+        }
+        
+        // Warehouse Receipt
+        if (r.transactionDate || r.transactionDateTime) {
+            return {
+                ...r,
+                isOnline: false
+            };
+        }
+        
+        return null;
+    }
 
     // --- FILTERING ---
     function initFilters(data) {
@@ -1094,6 +1177,9 @@
         let gasVisits = 0;
         let gasLocations = new Set();
         
+        let onlineSpent = 0;
+        let onlineOrderCount = 0;
+        
         itemMap.clear();
         deptMap.clear();
         discountMap.clear();
@@ -1126,6 +1212,29 @@
 
             // Overview Stats
             totalSpent += total;
+            
+            if (r.isOnline) {
+                onlineSpent += total;
+                onlineOrderCount++;
+                
+                // Add to Online Dept
+                const deptId = "Online";
+                if (!deptMap.has(deptId)) {
+                    deptMap.set(deptId, {
+                        id: deptId,
+                        name: "Costco.com Online",
+                        spend: 0,
+                        items: new Set(),
+                        monthly: {},
+                        refundAmount: 0,
+                        returnCount: 0
+                    });
+                }
+                const dStats = deptMap.get(deptId);
+                dStats.spend += total;
+                dStats.monthly[monthKey] = (dStats.monthly[monthKey] || 0) + total;
+                deptSpend[deptId] = (deptSpend[deptId] || 0) + total;
+            }
             
             // Refunds
             if (total < 0 || r.transactionType === "Refund") {
@@ -1228,13 +1337,14 @@
                     const desc = i.itemDescription01 || "";
 
                     // Check for Discount Pattern
-                    // Pattern: Negative amount AND description starts with "/" followed by item ID
-                    if (amount < 0 && desc.trim().startsWith('/')) {
+                    // Pattern: Description starts with "/" followed by item ID
+                    if (desc.trim().startsWith('/')) {
                         const targetId = desc.replace('/', '').trim();
-                        const saved = Math.abs(amount);
+                        // amount < 0 means discount (saving). amount > 0 means reversal.
+                        const saved = -amount;
                         
                         totalSaved += saved;
-                        discountCount++;
+                        if (amount < 0) discountCount++;
 
                         if (!discountMap.has(targetId)) {
                             discountMap.set(targetId, {
@@ -1245,7 +1355,7 @@
                         }
                         const dStats = discountMap.get(targetId);
                         dStats.totalSaved += saved;
-                        dStats.count++;
+                        if (amount < 0) dStats.count++;
                         
                         // We don't count discounts as "items" for itemCount
                         return; 
@@ -1254,14 +1364,18 @@
                     itemCount += unit;
 
                     // Dept
-                    const deptId = i.itemDepartmentNumber || "Other";
-                    deptSpend[deptId] = (deptSpend[deptId] || 0) + amount;
+                    let deptId = i.itemDepartmentNumber || "Other";
+                    if (r.isOnline) deptId = "Online";
+
+                    if (!r.isOnline) {
+                        deptSpend[deptId] = (deptSpend[deptId] || 0) + amount;
+                    }
 
                     // Dept Map Logic
                     if (!deptMap.has(deptId)) {
                         deptMap.set(deptId, {
                             id: deptId,
-                            name: `Dept ${deptId}`, // Default name
+                            name: r.isOnline ? "Costco.com Online" : `Dept ${deptId}`, // Default name
                             spend: 0,
                             items: new Set(),
                             monthly: {},
@@ -1270,9 +1384,11 @@
                         });
                     }
                     const dStats = deptMap.get(deptId);
-                    dStats.spend += amount;
+                    if (!r.isOnline) {
+                        dStats.spend += amount;
+                        dStats.monthly[monthKey] = (dStats.monthly[monthKey] || 0) + amount;
+                    }
                     dStats.items.add(id);
-                    dStats.monthly[monthKey] = (dStats.monthly[monthKey] || 0) + amount;
 
                     // Item Map
                     if (!itemMap.has(id)) {
@@ -1281,6 +1397,7 @@
                             name: i.itemDescription01 || "Unknown",
                             totalSpent: 0,
                             count: 0,
+                            onlineCount: 0,
                             prices: [], // {date, price, warehouse}
                             depts: new Set()
                         });
@@ -1288,13 +1405,17 @@
                     const item = itemMap.get(id);
                     item.totalSpent += amount;
                     item.count += unit;
+                    if (r.isOnline) item.onlineCount = (item.onlineCount || 0) + unit;
                     item.depts.add(deptId);
                     
                     // Price History (only if positive purchase)
                     if (amount > 0 && unit > 0) {
+                        // Use explicit unit price if available (from detailed online data), otherwise calculate
+                        const unitPrice = i.unitPrice || (amount / unit);
+                        
                         item.prices.push({
                             date: date,
-                            price: amount / unit,
+                            price: unitPrice,
                             unit: unit,
                             warehouse: warehouse
                         });
@@ -1303,7 +1424,7 @@
                         if (!purchaseHistory.has(id)) purchaseHistory.set(id, []);
                         purchaseHistory.get(id).push({
                             date: date,
-                            price: amount / unit,
+                            price: unitPrice,
                             unit: unit,
                             warehouse: warehouse
                         });
@@ -1390,6 +1511,9 @@
         document.getElementById('ov-rewards').textContent = formatMoney(rewardsEligible * 0.02);
         document.getElementById('ov-refunds').textContent = formatMoney(refundTotal);
         document.getElementById('ov-refundCount').textContent = `${refundCount} Returns`;
+        
+        document.getElementById('ov-onlineSpent').textContent = formatMoney(onlineSpent);
+        document.getElementById('ov-onlineCount').textContent = `${onlineOrderCount} Orders`;
 
         renderOverviewCharts(monthlySpend, deptSpend);
         renderRewardsTable(yearlySubtotal);
@@ -1517,15 +1641,17 @@
         `).join('');
         // All Products Table
         const allTbody = document.querySelector('#cat-allProductsTable tbody');
-        allTbody.innerHTML = topItems.map(i => `
+        allTbody.innerHTML = topItems.map(i => {
+            const avgPrice = i.count > 0 ? i.totalSpent / i.count : 0;
+            return `
             <tr>
                 <td>${i.name}</td>
                 <td>${i.id}</td>
                 <td class="money">${formatMoney(i.totalSpent)}</td>
                 <td>${i.count}</td>
-                <td class="money">${formatMoney(i.totalSpent/i.count)}</td>
+                <td class="money">${formatMoney(avgPrice)}</td>
             </tr>
-        `).join('');
+        `}).join('');
     };
 
     function renderDiscountsTab(totalSaved, count) {
@@ -1687,7 +1813,7 @@
         
         const tbody = document.querySelector('#productTable tbody');
         tbody.innerHTML = displayItems.map(i => {
-            const avgPrice = i.count ? i.totalSpent / i.count : 0;
+            const avgPrice = i.count > 0 ? i.totalSpent / i.count : 0;
             return `
             <tr onclick="showProductDetail('${i.id}')" style="cursor:pointer">
                 <td>${i.id}</td>
@@ -1913,15 +2039,21 @@
                     </tr>
                 </thead>
                 <tbody>
-                    ${yearTrans.map(p => `
+                    ${yearTrans.map(p => {
+                        const total = p.price * p.unit;
+                        const isRefund = total < 0;
+                        const colorStyle = isRefund ? 'color:var(--success-color)' : '';
+                        return `
                         <tr>
                             <td style="padding:8px 12px">${p.date.toLocaleDateString()}</td>
                             <td style="padding:8px 12px">${p.warehouse}</td>
                             <td style="padding:8px 12px; text-align:right" class="money">${formatMoney(p.price)}</td>
                             <td style="padding:8px 12px; text-align:center">${p.unit}</td>
-                            <td style="padding:8px 12px; text-align:right" class="money">${formatMoney(p.price * p.unit)}</td>
+                            <td style="padding:8px 12px; text-align:right; ${colorStyle}" class="money">
+                                ${formatMoney(total)} ${isRefund ? '(Credit)' : ''}
+                            </td>
                         </tr>
-                    `).join('')}
+                    `}).join('')}
                 </tbody>
             `;
             
@@ -2278,10 +2410,12 @@
         document.getElementById('ref-returnCount').textContent = `${returnCount} Items`;
         document.getElementById('ref-totalAdjustments').textContent = formatMoney(totalAdj);
         
-        const rate = totalSpent > 0 ? (totalReturned / totalSpent) * 100 : 0;
+        const rate = (totalSpent + totalReturned + totalAdj) > 0 ? (totalReturned / (totalSpent + totalReturned + totalAdj)) * 100 : 0;
         document.getElementById('ref-rate').textContent = `${rate.toFixed(2)}%`;
         
-        document.getElementById('ref-netSpend').textContent = formatMoney(totalSpent - totalReturned - totalAdj);
+        // totalSpent is already Net (Purchases - Refunds). 
+        // So "Net Spend" is just totalSpent.
+        document.getElementById('ref-netSpend').textContent = formatMoney(totalSpent);
 
         // Returns Table
         const retTbody = document.querySelector('#returnsTable tbody');
