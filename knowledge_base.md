@@ -48,3 +48,14 @@ To correctly calculate spend and track savings:
 3.  **Link** the discount to the target product. The target product's `itemNumber` is contained in the discount's description (e.g., parse `/1421932` to find item `1421932`).
 4.  **Adjust** the net cost of the product for spend analysis.
 5.  **Aggregate** the absolute values of these discount items to calculate "Total Saved".
+
+## Product Identity & Merging
+
+Costco often changes the `itemNumber` (Product ID) for the same physical product over time (e.g., due to packaging changes or internal re-indexing).
+
+### Merging Strategy
+To provide accurate long-term analysis (frequency, lifetime spend):
+1.  **Group by Name:** Use the `itemDescription` (normalized) as the primary key for aggregation.
+2.  **Merge IDs:** Collect all `itemNumber`s associated with that name.
+3.  **Consolidate History:** Combine purchase history arrays from all matching IDs into a single timeline.
+4.  **Application:** This logic should be applied to Forecasting, Recurring Item Analysis, and Product Search views.

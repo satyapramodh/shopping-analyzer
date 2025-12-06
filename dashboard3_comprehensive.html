@@ -276,6 +276,7 @@
         <button class="tab-btn" onclick="switchTab('payments')">Payments</button>
         <button class="tab-btn" onclick="switchTab('price-analysis')">Price Analysis</button>
         <button class="tab-btn" onclick="switchTab('analysis')">Deep Analysis</button>
+        <button class="tab-btn" onclick="switchTab('forecast')">Forecast</button>
     </div>
 
     <!-- TAB: OVERVIEW -->
@@ -926,6 +927,86 @@
                     </thead>
                     <tbody></tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB: FORECAST -->
+    <div id="forecast" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card">
+                <h3>Weekly Essentials</h3>
+                <div class="value" id="fc-weeklyCount">0</div>
+                <div class="sub">Items bought every ~7 days</div>
+            </div>
+            <div class="card">
+                <h3>Monthly Staples</h3>
+                <div class="value" id="fc-monthlyCount">0</div>
+                <div class="sub">Items bought every ~30 days</div>
+            </div>
+            <div class="card">
+                <h3>Quarterly Stock-up</h3>
+                <div class="value" id="fc-quarterlyCount">0</div>
+                <div class="sub">Items bought every ~3 months</div>
+            </div>
+            <div class="card">
+                <h3>Yearly / Occasional</h3>
+                <div class="value" id="fc-yearlyCount">0</div>
+                <div class="sub">Items bought once a year</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>
+                    Weekly Forecast (Next 7 Days)
+                    <span id="fc-weeklyTotal" class="money" style="font-size:1rem; color:var(--success-color); float:right">$0.00</span>
+                </h3>
+                <div class="table-container">
+                    <table id="fc-weeklyTable">
+                        <thead><tr><th>Item</th><th>Freq</th><th>Last Bought</th><th>Est. Next</th><th class="money">Est. Cost</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>
+                    Monthly Forecast (Next 30 Days)
+                    <span id="fc-monthlyTotal" class="money" style="font-size:1rem; color:var(--success-color); float:right">$0.00</span>
+                </h3>
+                <div class="table-container">
+                    <table id="fc-monthlyTable">
+                        <thead><tr><th>Item</th><th>Freq</th><th>Last Bought</th><th>Est. Next</th><th class="money">Est. Cost</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>
+                    Quarterly Forecast
+                    <span id="fc-quarterlyTotal" class="money" style="font-size:1rem; color:var(--success-color); float:right">$0.00</span>
+                </h3>
+                <div class="table-container">
+                    <table id="fc-quarterlyTable">
+                        <thead><tr><th>Item</th><th>Freq</th><th>Last Bought</th><th>Est. Next</th><th class="money">Est. Cost</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>
+                    Yearly Forecast
+                    <span id="fc-yearlyTotal" class="money" style="font-size:1rem; color:var(--success-color); float:right">$0.00</span>
+                </h3>
+                <div class="table-container">
+                    <table id="fc-yearlyTable">
+                        <thead><tr><th>Item</th><th>Freq</th><th>Last Bought</th><th>Est. Next</th><th class="money">Est. Cost</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -1645,6 +1726,7 @@
         renderGasTab(gasSpent, gasGallons, gasPriceSum, gasVisits, gasLocations, gasMonthlySpend);
         renderPaymentsTab(paymentStats);
         renderPriceAnalysisTab();
+        renderForecastTab();
     }
 
     // --- CATEGORY TAB LOGIC ---
@@ -2691,8 +2773,160 @@
                 `;
             });
         });
-        
         tbody.innerHTML = tableHtml;
+    }
+
+    function getMergedItems() {
+        const mergedMap = new Map(); // Key: Normalized Name
+
+        itemMap.forEach(item => {
+            // Normalize name: remove extra spaces, uppercase
+            // Also handle common prefixes like "KS " vs "KIRKLAND SIGNATURE " if we wanted to be fancy, 
+            // but for now exact string match is safer.
+            const normName = item.name.trim().toUpperCase();
+            
+            if (!mergedMap.has(normName)) {
+                mergedMap.set(normName, {
+                    name: item.name, // Keep original casing
+                    ids: new Set(),
+                    totalSpent: 0,
+                    count: 0,
+                    prices: []
+                });
+            }
+            const merged = mergedMap.get(normName);
+            merged.ids.add(item.id);
+            merged.totalSpent += item.totalSpent;
+            merged.count += item.count;
+            merged.prices = merged.prices.concat(item.prices);
+        });
+
+        return Array.from(mergedMap.values()).map(m => ({
+            ...m,
+            id: Array.from(m.ids).join(', '), // Display string
+            primaryId: Array.from(m.ids)[0] // For linking
+        }));
+    }
+
+    function renderForecastTab() {
+        const items = getMergedItems();
+        
+        const weekly = [];
+        const monthly = [];
+        const quarterly = [];
+        const yearly = [];
+
+        items.forEach(i => {
+            // Filter one-offs: Need at least 2 distinct purchase events to establish a frequency
+            // Note: i.prices contains all purchase events.
+            const purchases = i.prices.sort((a,b) => a.date - b.date);
+            
+            // Group by date to count distinct visits (ignore multiple units in same visit for frequency)
+            const visits = [];
+            if (purchases.length > 0) {
+                visits.push(purchases[0]);
+                for (let k = 1; k < purchases.length; k++) {
+                    const prev = visits[visits.length-1];
+                    const curr = purchases[k];
+                    // If same date, skip
+                    if (curr.date.getTime() !== prev.date.getTime()) {
+                        visits.push(curr);
+                    }
+                }
+            }
+
+            if (visits.length < 2) return; // One-off or single visit
+
+            // Calculate Intervals between visits
+            const intervals = [];
+            for (let k = 1; k < visits.length; k++) {
+                const diffTime = Math.abs(visits[k].date - visits[k-1].date);
+                const diffDays = diffTime / (1000 * 60 * 60 * 24); 
+                intervals.push(diffDays);
+            }
+
+            // Avg Interval
+            const sumIntervals = intervals.reduce((a, b) => a + b, 0);
+            const avgDays = sumIntervals / intervals.length;
+
+            // Estimate next purchase
+            const lastDate = visits[visits.length - 1].date;
+            const nextDate = new Date(lastDate);
+            nextDate.setDate(nextDate.getDate() + avgDays);
+            
+            // Estimate Cost per Visit
+            // Total Spend / Number of Visits
+            const estCost = i.totalSpent / visits.length;
+
+            const entry = {
+                ...i,
+                avgDays: avgDays,
+                lastDate: lastDate,
+                nextDate: nextDate,
+                estCost: estCost,
+                visitCount: visits.length
+            };
+
+            // Bucketing Logic
+            if (avgDays <= 14) weekly.push(entry);
+            else if (avgDays <= 60) monthly.push(entry);
+            else if (avgDays <= 180) quarterly.push(entry);
+            else yearly.push(entry);
+        });
+
+        // Sort by Next Date (Soonest first)
+        const sorter = (a,b) => a.nextDate - b.nextDate;
+        weekly.sort(sorter);
+        monthly.sort(sorter);
+        quarterly.sort(sorter);
+        yearly.sort(sorter);
+
+        // Update Counts
+        document.getElementById('fc-weeklyCount').textContent = weekly.length;
+        document.getElementById('fc-monthlyCount').textContent = monthly.length;
+        document.getElementById('fc-quarterlyCount').textContent = quarterly.length;
+        document.getElementById('fc-yearlyCount').textContent = yearly.length;
+
+        // Calculate Totals
+        const sumCost = (arr) => arr.reduce((sum, item) => sum + item.estCost, 0);
+        document.getElementById('fc-weeklyTotal').textContent = formatMoney(sumCost(weekly));
+        document.getElementById('fc-monthlyTotal').textContent = formatMoney(sumCost(monthly));
+        document.getElementById('fc-quarterlyTotal').textContent = formatMoney(sumCost(quarterly));
+        document.getElementById('fc-yearlyTotal').textContent = formatMoney(sumCost(yearly));
+
+        // Render Tables
+        const renderTable = (id, data) => {
+            const tbody = document.querySelector(`#${id} tbody`);
+            tbody.innerHTML = data.map(r => {
+                const today = new Date();
+                const diff = Math.ceil((r.nextDate - today) / (1000 * 60 * 60 * 24));
+                let statusColor = '';
+                if (diff < 0) statusColor = 'color:var(--danger-color); font-weight:bold'; // Overdue
+                else if (diff < 7) statusColor = 'color:var(--warning-color); font-weight:bold'; // Due soon
+
+                // Truncate ID list if too long
+                let idDisplay = r.id;
+                if (idDisplay.length > 20) idDisplay = r.id.substring(0, 20) + '...';
+
+                return `
+                <tr onclick="showProductDetail('${r.primaryId}')" style="cursor:pointer">
+                    <td>
+                        <div style="font-weight:bold">${r.name}</div>
+                        <div style="font-size:0.8em; color:var(--text-muted)" title="${r.id}">${idDisplay}</div>
+                    </td>
+                    <td>~${Math.round(r.avgDays)} days</td>
+                    <td>${r.lastDate.toLocaleDateString()}</td>
+                    <td style="${statusColor}">${r.nextDate.toLocaleDateString()} (${diff}d)</td>
+                    <td class="money">${formatMoney(r.estCost)}</td>
+                </tr>
+                `;
+            }).join('');
+        };
+
+        renderTable('fc-weeklyTable', weekly);
+        renderTable('fc-monthlyTable', monthly);
+        renderTable('fc-quarterlyTable', quarterly);
+        renderTable('fc-yearlyTable', yearly);
     }
 </script>
 </body>
