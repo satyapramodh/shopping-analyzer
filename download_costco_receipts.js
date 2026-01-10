@@ -1,3 +1,5 @@
+// ref: https://github.com/ankurdave/beancount_import_sources/blob/main/download/download_costco_receipts.js
+
 async function listGasReceipts(startDate, endDate) {
     return await new Promise(function (resolve, reject) {
         var xhr = new XMLHttpRequest();
