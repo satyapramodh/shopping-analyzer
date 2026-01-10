@@ -1,6 +1,7 @@
 // 1. Go to https://www.costco.com/OrderStatusCmd
 // 2. Open Developer Tools (F12) -> Console
 // 3. Paste this entire script and run it.
+// TODO: WORK IN PROGRESS - Untested
 
 const CONFIG = {
     startDate: '01/01/2020', // Unified start date for both
