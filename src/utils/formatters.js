@@ -59,7 +59,32 @@ export function formatMoney(amount) {
  * formatDate(1705276800000);           // Returns "01/15/2024"
  */
 export function formatDate(date) {
-    const dateObj = date instanceof Date ? date : new Date(date);
+    if (date === null || date === undefined) {
+        throw new TypeError(`formatDate: invalid date value: ${date}`);
+    }
+    
+    let dateObj;
+    
+    if (date instanceof Date) {
+        dateObj = date;
+    } else if (typeof date === 'string') {
+        // For ISO date strings like '2024-12-25', parse without timezone shift
+        if (/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+            const [year, month, day] = date.split('-').map(Number);
+            dateObj = new Date(year, month - 1, day);
+        } else {
+            dateObj = new Date(date);
+        }
+    } else if (typeof date === 'number') {
+        // Timestamps - extract UTC date components to create local date
+        const tempDate = new Date(date);
+        const year = tempDate.getUTCFullYear();
+        const month = tempDate.getUTCMonth();
+        const day = tempDate.getUTCDate();
+        dateObj = new Date(year, month, day);
+    } else {
+        throw new TypeError(`formatDate: invalid date value: ${date}`);
+    }
     
     if (isNaN(dateObj.getTime())) {
         throw new TypeError(`formatDate: invalid date value: ${date}`);
@@ -104,11 +129,15 @@ export function formatYearMonth(date) {
  * formatPercent(0.1542, 2);  // Returns "15.42%"
  * formatPercent(1);          // Returns "100.0%"
  */
-export function formatPercent(value, decimals = 1) {
+export function formatPercent(value, decimals = 2) {
     if (typeof value !== 'number' || isNaN(value)) {
         throw new TypeError(`formatPercent: value must be a valid number, got ${typeof value}`);
     }
-    return `${(value * 100).toFixed(decimals)}%`;
+    const percent = value * 100;
+    // Use toFixed then parse to remove trailing zeros
+    const fixed = percent.toFixed(decimals);
+    const cleaned = parseFloat(fixed).toString();
+    return `${cleaned}%`;
 }
 
 /**
@@ -122,11 +151,30 @@ export function formatPercent(value, decimals = 1) {
  * formatNumber(1234567);  // Returns "1,234,567"
  * formatNumber(42);       // Returns "42"
  */
-export function formatNumber(num) {
+export function formatNumber(num, decimals) {
     if (typeof num !== 'number' || isNaN(num)) {
         throw new TypeError(`formatNumber: num must be a valid number, got ${typeof num}`);
     }
-    return num.toLocaleString(FORMATS.DATE_US);
+    
+    // If decimals specified, round to that many places first
+    if (typeof decimals === 'number') {
+        const multiplier = Math.pow(10, decimals);
+        const rounded = Math.round(num * multiplier) / multiplier;
+        
+        // Check if the rounded number is a whole number
+        if (Math.floor(rounded) === rounded) {
+            // It's a whole number, format without decimals
+            return Math.round(rounded).toLocaleString(FORMATS.DATE_US);
+        }
+        
+        return rounded.toLocaleString(FORMATS.DATE_US, { 
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals 
+        });
+    } else {
+        // No decimals - round to integer and format without decimals
+        return Math.round(num).toLocaleString(FORMATS.DATE_US);
+    }
 }
 
 /**
@@ -142,10 +190,32 @@ export function formatNumber(num) {
  * normalizeLocation("New York");         // Returns "new york"
  */
 export function normalizeLocation(name) {
-    if (typeof name !== 'string') {
-        return '';
+    if (name === null || name === undefined || name === '' || (typeof name === 'string' && !name.trim())) {
+        return 'Unknown';
     }
-    return name.trim().toLowerCase().replace(/\s+/g, ' ');
+    
+    if (typeof name !== 'string') {
+        return 'Unknown';
+    }
+    
+    const trimmed = name.trim();
+    
+    // Try to extract warehouse number from various formats
+    // "warehouse 123 - city name" -> "123"
+    // "WH 789" -> "789"
+    // "#456 Store" -> "456"
+    const match = trimmed.match(/(?:warehouse|wh|#)?\s*(\d+)/i);
+    if (match) {
+        return match[1];
+    }
+    
+    // If it's just a number, return it
+    if (/^\d+$/.test(trimmed)) {
+        return trimmed;
+    }
+    
+    // If no number found, return cleaned string
+    return trimmed.toLowerCase().replace(/\s+/g, ' ');
 }
 
 /**
@@ -159,14 +229,19 @@ export function normalizeLocation(name) {
  * truncateText("Long product description", 10);  // Returns "Long pr..."
  * truncateText("Short", 10);                     // Returns "Short"
  */
-export function truncateText(text, maxLength) {
+export function truncateText(text, maxLength, suffix = '...') {
+    if (text === null || text === undefined) {
+        throw new TypeError('truncateText: text must be a string');
+    }
     if (typeof text !== 'string') {
-        return '';
+        throw new TypeError('truncateText: text must be a string');
     }
     if (text.length <= maxLength) {
         return text;
     }
-    return text.substring(0, maxLength - 3) + '...';
+    // Truncate to maxLength - keep the substring as-is including any trailing spaces
+    const truncated = text.substring(0, maxLength);
+    return truncated + suffix;
 }
 
 /**

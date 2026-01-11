@@ -53,15 +53,26 @@ export class AppError extends Error {
 export class APIError extends AppError {
     /**
      * Creates an API error
+     * @param {string} message - Error message
      * @param {number} status - HTTP status code
-     * @param {*} response - API response body
-     * @param {string} [message] - Custom error message
+     * @param {*} [response] - API response body
      */
-    constructor(status, response, message) {
-        const msg = message || `API Error: ${status}`;
-        super(msg, { status, response });
+    constructor(message, status, response) {
+        super(message, { status, response });
         this.status = status;
+        this.statusCode = status;
         this.response = response;
+    }
+
+    /**
+     * Converts error to JSON with statusCode
+     * @returns {Object} Error as JSON object
+     */
+    toJSON() {
+        return {
+            ...super.toJSON(),
+            statusCode: this.statusCode
+        };
     }
 }
 
@@ -73,10 +84,16 @@ export class NetworkError extends AppError {
     /**
      * Creates a network error
      * @param {string} [message='Network request failed'] - Error message
-     * @param {Object} [context={}] - Additional context
+     * @param {Object} [context] - Additional context
      */
-    constructor(message = 'Network request failed', context = {}) {
-        super(message, context);
+    constructor(message = 'Network request failed', context) {
+        // Don't pass context to super if it's undefined - this prevents creating {}
+        if (arguments.length === 1) {
+            super(message);
+            this.context = undefined;
+        } else {
+            super(message, context);
+        }
     }
 }
 
@@ -87,18 +104,25 @@ export class NetworkError extends AppError {
 export class DataValidationError extends AppError {
     /**
      * Creates a data validation error
-     * @param {string} field - Field name that failed validation
-     * @param {*} value - Invalid value
-     * @param {string} [reason] - Reason for validation failure
+     * @param {string} message - Error message
+     * @param {Object} [context={}] - Validation context (field names, values, etc.)
      */
-    constructor(field, value, reason) {
-        const message = reason 
-            ? `Invalid ${field}: ${reason}`
-            : `Invalid ${field}: ${value}`;
-        super(message, { field, value, reason });
-        this.field = field;
-        this.value = value;
-        this.reason = reason;
+    constructor(message, context = {}) {
+        super(message, context);
+        // Store individual properties for backward compatibility
+        if (context.field !== undefined) {
+            this.field = context.field;
+        }
+        if (context.value !== undefined) {
+            this.value = context.value;
+        }
+        if (context.reason !== undefined) {
+            this.reason = context.reason;
+        }
+        // Also support individual field access from context
+        if (context.email !== undefined) {
+            this.email = context.email;
+        }
     }
 }
 

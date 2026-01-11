@@ -11,13 +11,24 @@
 
 /**
  * Log levels in order of severity
- * @enum {string}
+ * @enum {number}
  */
 export const LogLevel = {
-    DEBUG: 'debug',
-    INFO: 'info',
-    WARN: 'warn',
-    ERROR: 'error'
+    DEBUG: 0,
+    INFO: 1,
+    WARN: 2,
+    ERROR: 3
+};
+
+/**
+ * Map numeric levels to string names
+ * @private
+ */
+const LEVEL_NAMES = {
+    0: 'debug',
+    1: 'info',
+    2: 'warn',
+    3: 'error'
 };
 
 /**
@@ -31,6 +42,7 @@ export class Logger {
     constructor(namespace = 'App') {
         this.namespace = namespace;
         this.enabled = true;
+        this.minLevel = LogLevel.DEBUG;
     }
 
     /**
@@ -43,18 +55,26 @@ export class Logger {
     _log(level, message, context = {}) {
         if (!this.enabled) return;
 
+        // Convert string level to number for comparison
+        const levelValue = typeof level === 'string' ? 
+            Object.values(LEVEL_NAMES).indexOf(level) : level;
+        
+        if (levelValue < this.minLevel) return;
+
+        const levelName = LEVEL_NAMES[levelValue] || LEVEL_NAMES[level] || 'info';
         const timestamp = new Date().toISOString();
         const logEntry = {
             timestamp,
-            level,
+            level: levelValue,
+            levelName,
             namespace: this.namespace,
             message,
             ...context
         };
 
-        const consoleMethod = console[level] || console.log;
+        const consoleMethod = console[levelName] || console.log;
         consoleMethod(
-            `[${timestamp}] [${level.toUpperCase()}] [${this.namespace}] ${message}`,
+            `[${timestamp}] [${levelName.toUpperCase()}] [${this.namespace}] ${message}`,
             context && Object.keys(context).length > 0 ? context : ''
         );
 
@@ -114,6 +134,33 @@ export class Logger {
     }
 
     /**
+     * Check if logging is enabled
+     * @returns {boolean} True if enabled
+     */
+    isEnabled() {
+        return this.enabled;
+    }
+
+    /**
+     * Set minimum log level
+     * @param {number} level - Minimum log level (LogLevel.DEBUG, INFO, WARN, ERROR)
+     */
+    setLevel(level) {
+        if (typeof level !== 'number' || level < 0 || level > 3) {
+            throw new TypeError('Level must be a number between 0-3');
+        }
+        this.minLevel = level;
+    }
+
+    /**
+     * Get current minimum log level
+     * @returns {number} Current minimum log level
+     */
+    getLevel() {
+        return this.minLevel;
+    }
+
+    /**
      * Enables logging
      */
     enable() {
@@ -137,6 +184,18 @@ export class Logger {
      */
     child(childNamespace) {
         return new Logger(`${this.namespace}:${childNamespace}`);
+    }
+
+    /**
+     * Creates a child logger with extended namespace (alias for child)
+     * @param {string} childNamespace - Child namespace to append
+     * @returns {Logger} New logger instance
+     * @example
+     * const apiLogger = logger.createChild('API');
+     * apiLogger.info('Request sent'); // Logs: [App:API] Request sent
+     */
+    createChild(childNamespace) {
+        return this.child(childNamespace);
     }
 }
 

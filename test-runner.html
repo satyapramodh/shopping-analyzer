@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Costco Dashboard - Test Suite</title>
+  
+  <!-- Mocha CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/mocha@10.2.0/mocha.css">
+</head>
+<body>
+  <div id="mocha"></div>
+
+  <!-- Mocha and Chai from CDN -->
+  <script src="https://unpkg.com/mocha@10.2.0/mocha.js"></script>
+  <script src="https://unpkg.com/chai@4.3.10/chai.js"></script>
+  
+  <script type="module">
+    // Setup Mocha
+    mocha.setup({
+      ui: 'bdd',
+      timeout: 5000,
+      color: true
+    });
+
+    // Make chai available globally
+    window.expect = chai.expect;
+    window.assert = chai.assert;
+
+    // Make Mocha BDD functions available globally for ES6 modules
+    window.describe = describe;
+    window.it = it;
+    window.before = before;
+    window.after = after;
+    window.beforeEach = beforeEach;
+    window.afterEach = afterEach;
+
+    // Dynamically import test suites after Mocha setup is complete
+    Promise.all([
+      import('./tests/utils/formatters.test.js'),
+      import('./tests/utils/logger.test.js'),
+      import('./tests/utils/constants.test.js'),
+      import('./tests/utils/errors.test.js'),
+      import('./tests/utils/memoize.test.js'),
+      import('./tests/utils/debounce.test.js'),
+      import('./tests/services/CalculationService.test.js'),
+      import('./tests/services/FilterService.test.js'),
+      import('./tests/core/StateManager.test.js'),
+      import('./tests/integration/data-flow.test.js')
+    ]).then(() => {
+      // Run tests after all modules are loaded
+      mocha.run();
+    }).catch(err => {
+      console.error('Failed to load test modules:', err);
+    });
+  
+  </script>
+</body>
+</html>

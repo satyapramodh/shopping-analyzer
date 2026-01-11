@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Costco Analytics Pro</title>
+    
+    <!-- Chart.js - Only external dependency -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <style>
+        /* ========================================
+           CSS Variables (Theme Support)
+           ======================================== */
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border-color: #333;
+            --accent-color: #3b82f6;
+            --accent-hover: #2563eb;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --header-bg: #18181b;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="light"] {
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --accent-color: #2563eb;
+            --accent-hover: #1d4ed8;
+            --success-color: #059669;
+            --danger-color: #dc2626;
+            --warning-color: #d97706;
+            --header-bg: #ffffff;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* ========================================
+           Base Styles
+           ======================================== */
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            background: var(--header-bg);
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        /* ========================================
+           Form Elements
+           ======================================== */
+        input[type="file"], select, button, input[type="text"] {
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        button {
+            cursor: pointer;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            font-weight: 600;
+        }
+
+        button:hover { background: var(--accent-hover); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* ========================================
+           Tab Navigation
+           ======================================== */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 1rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover { background: rgba(128, 128, 128, 0.1); }
+        .tab-btn.active { background: var(--accent-color); color: white; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ========================================
+           Grid System
+           ======================================== */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+        /* ========================================
+           Cards
+           ======================================== */
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+        }
+
+        .card h3 { 
+            margin-top: 0; 
+            font-size: 1.1rem; 
+            color: var(--text-muted); 
+            display: flex; 
+            justify-content: space-between; 
+        }
+        
+        .card .value { font-size: 1.8rem; font-weight: bold; margin: 10px 0; }
+        .card .sub { font-size: 0.85rem; color: var(--text-muted); }
+
+        /* ========================================
+           Tables
+           ======================================== */
+        .table-container {
+            overflow: auto;
+            max-height: 350px;
+            scrollbar-width: thin;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.9rem;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th { 
+            background: var(--card-bg);
+            font-weight: 600; 
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: 0 1px 0 var(--border-color);
+            cursor: pointer;
+        }
+
+        th:hover { background: rgba(128, 128, 128, 0.1); }
+        tr:hover { background: rgba(128, 128, 128, 0.05); }
+        
+        .money { font-family: monospace; text-align: right; }
+        .pos { color: var(--success-color); }
+        .neg { color: var(--danger-color); }
+
+        /* ========================================
+           Charts
+           ======================================== */
+        .chart-container { 
+            position: relative; 
+            height: 300px; 
+            width: 100%; 
+        }
+
+        /* ========================================
+           Multi-Select Filters
+           ======================================== */
+        .multi-select {
+            height: 100px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            background: var(--card-bg);
+            padding: 5px;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .multi-select label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        /* ========================================
+           Product Detail Panel
+           ======================================== */
+        #productDetailPanel {
+            display: none;
+            margin-top: 20px;
+            border-top: 2px solid var(--accent-color);
+            padding-top: 20px;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ========================================
+           Loading & Status
+           ======================================== */
+        .loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--card-bg);
+            padding: 20px 40px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            z-index: 1000;
+        }
+
+        .loading.active { display: block; }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+
+        .loading-overlay.active { display: block; }
+
+        /* ========================================
+           Utility Classes
+           ======================================== */
+        .hidden { display: none !important; }
+        .text-center { text-align: center; }
+        .mt-20 { margin-top: 20px; }
+    </style>
+</head>
+<body data-theme="dark">
+
+<div class="container">
+    <!-- Header -->
+    <header>
+        <h1>🛒 Costco Analytics Pro</h1>
+        <div class="controls">
+            <button id="themeToggle">☀ Light Mode</button>
+            <input type="file" id="jsonFile" accept=".json" multiple>
+            <span id="status" style="font-size: 0.8rem; color: var(--text-muted);">Waiting for file...</span>
+        </div>
+    </header>
+
+    <!-- Global Filters -->
+    <div class="card" style="margin-bottom: 20px;">
+        <h3 style="margin-bottom: 10px;">Filters</h3>
+        <div class="controls" style="align-items: flex-start;">
+            <div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <label style="font-size:0.85rem;">Year(s)</label>
+                    <div style="display:flex; gap:2px;">
+                        <button id="yearSelectAll" style="padding:2px 6px; font-size:0.7rem; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color);">All</button>
+                        <button id="yearDeselectAll" style="padding:2px 6px; font-size:0.7rem; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color);">None</button>
+                    </div>
+                </div>
+                <div id="yearFilter" class="multi-select" style="width: 150px;"></div>
+            </div>
+            <div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                    <label style="font-size:0.85rem;">Location(s)</label>
+                    <div style="display:flex; gap:2px;">
+                        <button id="locSelectAll" style="padding:2px 6px; font-size:0.7rem; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color);">All</button>
+                        <button id="locDeselectAll" style="padding:2px 6px; font-size:0.7rem; background:var(--card-bg); color:var(--text-main); border:1px solid var(--border-color);">None</button>
+                    </div>
+                </div>
+                <div id="locationFilter" class="multi-select" style="width: 300px; height: 200px;"></div>
+            </div>
+            <button id="applyFiltersBtn" style="margin-top: 25px;">Apply Filters</button>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="products">Product Search</button>
+        <button class="tab-btn" data-tab="categories">Categories</button>
+        <button class="tab-btn" data-tab="discounts">Discounts</button>
+        <button class="tab-btn" data-tab="refunds">Refunds & Returns</button>
+        <button class="tab-btn" data-tab="gas">Gas Station</button>
+        <button class="tab-btn" data-tab="payments">Payments</button>
+        <button class="tab-btn" data-tab="price-analysis">Price Analysis</button>
+        <button class="tab-btn" data-tab="analysis">Deep Analysis</button>
+        <button class="tab-btn" data-tab="forecast">Forecast</button>
+    </div>
+
+    <!-- ========================================
+         TAB: OVERVIEW
+         ======================================== -->
+    <div id="overview" class="tab-content active">
+        <!-- KPI Cards -->
+        <div class="grid grid-4">
+            <div class="card">
+                <h3>Net Spend</h3>
+                <div class="value" id="ov-totalSpent">$0.00</div>
+                <div class="sub" id="ov-itemCount">0 Items</div>
+            </div>
+            <div class="card">
+                <h3>Visits</h3>
+                <div class="value" id="ov-visits">0</div>
+                <div class="sub" id="ov-avgVisit">Avg $0.00 / trip</div>
+            </div>
+            <div class="card">
+                <h3>Gas Spend</h3>
+                <div class="value" id="ov-gasSpent">$0.00</div>
+                <div class="sub" id="ov-gasGallons">0 Gallons</div>
+            </div>
+            <div class="card" style="border-left: 4px solid var(--warning-color);">
+                <h3>Est. Rewards (2%)</h3>
+                <div class="value" id="ov-rewards" style="color: var(--warning-color);">$0.00</div>
+                <div class="sub">Based on eligible spend</div>
+            </div>
+            <div class="card" style="border-left: 4px solid #7c3aed;">
+                <h3>Total Refunded</h3>
+                <div class="value" id="ov-refunds" style="color: #7c3aed;">$0.00</div>
+                <div class="sub" id="ov-refundCount">0 Returns</div>
+            </div>
+            <div class="card" style="border-left: 4px solid #3b82f6;">
+                <h3>Online Spend</h3>
+                <div class="value" id="ov-onlineSpent" style="color: #3b82f6;">$0.00</div>
+                <div class="sub" id="ov-onlineCount">0 Orders</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid">
+            <div class="card">
+                <h3>Monthly Spending Trend</h3>
+                <div class="chart-container">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Spend by Category (Dept)</h3>
+                <div class="chart-container">
+                    <canvas id="deptPieChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rewards Table -->
+        <div class="card" style="margin-bottom: 20px;">
+            <h3>2% Reward Tracker (Yearly)</h3>
+            <div class="table-container">
+                <table id="rewardsTable">
+                    <thead><tr><th>Year</th><th class="money">Qualifying Spend</th><th class="money">Est. Cashback</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Top Lists -->
+        <div class="grid">
+            <div class="card">
+                <h3>Top Spenders (Items)</h3>
+                <div class="table-container">
+                    <table id="topSpendersTable">
+                        <thead><tr><th>Item</th><th class="money">Total</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Most Frequent</h3>
+                <div class="table-container">
+                    <table id="mostFrequentTable">
+                        <thead><tr><th>Item</th><th class="money">Count</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: PRODUCTS
+         ======================================== -->
+    <div id="products" class="tab-content">
+        <div class="card">
+            <div class="controls" style="margin-bottom: 15px;">
+                <input type="text" id="productSearch" placeholder="Search by name, ID..." style="width: 300px;">
+                <select id="productSort">
+                    <option value="spend">Sort by Total Spend</option>
+                    <option value="count">Sort by Frequency</option>
+                    <option value="priceDesc">Price (High to Low)</option>
+                    <option value="priceAsc">Price (Low to High)</option>
+                </select>
+            </div>
+            <div class="table-container">
+                <table id="productTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th class="money">Avg Price</th>
+                            <th class="money">Total Spend</th>
+                            <th>Count</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Product Detail View -->
+        <div id="productDetailPanel" class="card">
+            <div style="display:flex; justify-content:space-between; align-items:start;">
+                <div>
+                    <h2 id="pd-name" style="margin:0;">Product Name</h2>
+                    <div id="pd-id" style="color:var(--text-muted); margin-bottom:10px;">#000000</div>
+                    <a id="pd-link" href="#" target="_blank" style="color:var(--accent-color); text-decoration:none;">View on Costco.com →</a>
+                </div>
+                <div style="text-align:right;">
+                    <div class="value" id="pd-total">$0.00</div>
+                    <div class="sub">Lifetime Spend</div>
+                </div>
+            </div>
+
+            <!-- Financials Grid -->
+            <div class="grid grid-4" style="margin-top: 20px;">
+                <div class="card" style="border-left: 4px solid var(--success-color);">
+                    <h3>Discounts</h3>
+                    <div class="value" id="pd-discountTotal" style="color:var(--success-color)">$0.00</div>
+                    <div class="sub" id="pd-discountCount">0 Times</div>
+                </div>
+                <div class="card" style="border-left: 4px solid var(--danger-color);">
+                    <h3>Refunds</h3>
+                    <div class="value" id="pd-refundTotal" style="color:var(--danger-color)">$0.00</div>
+                    <div class="sub" id="pd-refundCount">0 Returned</div>
+                </div>
+                <div class="card">
+                    <h3>Net Spend</h3>
+                    <div class="value" id="pd-netSpend">$0.00</div>
+                    <div class="sub">Total - Discounts</div>
+                </div>
+                <div class="card">
+                    <h3>Effective Unit Price</h3>
+                    <div class="value" id="pd-effectivePrice">$0.00</div>
+                    <div class="sub">Net / (Bought - Returned)</div>
+                </div>
+            </div>
+
+            <div class="grid" style="margin-top: 20px;">
+                <div class="card">
+                    <h3>Price History</h3>
+                    <div class="chart-container">
+                        <canvas id="pd-priceChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Monthly Volume</h3>
+                    <div class="chart-container">
+                        <canvas id="pd-volumeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid" style="margin-top: 20px;">
+                <div class="card">
+                    <h3>Stats</h3>
+                    <table style="width:100%">
+                        <tr><td>First Bought</td><td id="pd-firstDate" style="text-align:right">-</td></tr>
+                        <tr><td>Last Bought</td><td id="pd-lastDate" style="text-align:right">-</td></tr>
+                        <tr><td>Avg Frequency</td><td id="pd-frequency" style="text-align:right">-</td></tr>
+                        <tr><td>Min Price</td><td id="pd-minPrice" class="money">-</td></tr>
+                        <tr><td>Max Price</td><td id="pd-maxPrice" class="money">-</td></tr>
+                        <tr><td>Price Change</td><td id="pd-priceChange" class="money">-</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Spend Analysis Charts -->
+            <div class="grid" style="margin-top: 20px;">
+                <div class="card">
+                    <h3>Annual Spend</h3>
+                    <div class="chart-container">
+                        <canvas id="pd-yearSpendChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Cumulative Spend</h3>
+                    <div class="chart-container">
+                        <canvas id="pd-cumulativeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transaction History -->
+            <div class="card" style="margin-top: 20px;">
+                <h3>Transaction History</h3>
+                <div id="pd-transactionsList" style="margin-top:15px;"></div>
+            </div>
+            
+            <div class="card" style="margin-top: 20px;">
+                <h3>Purchase Locations</h3>
+                <div class="table-container">
+                    <table id="pd-locationTable">
+                        <thead><tr><th>Warehouse</th><th>Count</th><th class="money">Total Spent</th><th class="money">Avg Price</th><th>Last Purchase</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: CATEGORIES
+         ======================================== -->
+    <div id="categories" class="tab-content">
+        <div class="grid" style="grid-template-columns: 1fr 2fr;">
+            <div class="card">
+                <h3>Departments / Categories</h3>
+                <p class="sub" style="margin-bottom:10px">Click a department to analyze.</p>
+                <div class="table-container" style="max-height: 600px;">
+                    <table id="categoryListTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th class="money">Spend</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="categoryDetailPanel" class="card">
+                <div id="cat-placeholder" style="text-align:center; padding: 50px; color: var(--text-muted);">
+                    <h2 style="margin:0">Select a Department</h2>
+                    <p>Click on a department to view detailed analysis.</p>
+                </div>
+                <div id="cat-content" class="hidden">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                        <h2 id="cat-title" style="margin:0">Category Name</h2>
+                        <div style="text-align:right">
+                            <div class="value" id="cat-total" style="font-size:1.5rem; margin:0;">$0.00</div>
+                            <div class="sub">Net Spend</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-4" style="margin-bottom:20px;">
+                        <div class="card" style="padding:15px;">
+                            <div class="sub">Refunded</div>
+                            <div class="value" id="cat-refund" style="font-size:1.2rem; color:#ef4444;">$0.00</div>
+                        </div>
+                        <div class="card" style="padding:15px;">
+                            <div class="sub">Return Rate</div>
+                            <div class="value" id="cat-returnRate" style="font-size:1.2rem;">0%</div>
+                        </div>
+                        <div class="card" style="padding:15px;">
+                            <div class="sub">Items Returned</div>
+                            <div class="value" id="cat-returnCount" style="font-size:1.2rem;">0</div>
+                        </div>
+                    </div>
+
+                    <div class="grid">
+                        <div class="card">
+                            <h3>Monthly Spend</h3>
+                            <div class="chart-container" style="height:200px">
+                                <canvas id="cat-monthlyChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <h3>Top Products</h3>
+                            <div class="table-container" style="max-height:200px">
+                                <table id="cat-topProductsTable">
+                                    <thead><tr><th>Item</th><th class="money">Spend</th></tr></thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:20px">
+                        <h3>All Products in Category</h3>
+                        <div class="table-container">
+                            <table id="cat-allProductsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>ID</th>
+                                        <th class="money">Total Spend</th>
+                                        <th>Count</th>
+                                        <th class="money">Avg Price</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: DISCOUNTS
+         ======================================== -->
+    <div id="discounts" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card">
+                <h3>Total Saved</h3>
+                <div class="value" id="disc-totalSaved">$0.00</div>
+                <div class="sub">All time discounts</div>
+            </div>
+            <div class="card">
+                <h3>Discount Count</h3>
+                <div class="value" id="disc-count">0</div>
+                <div class="sub">Number of coupons applied</div>
+            </div>
+            <div class="card">
+                <h3>Avg Discount</h3>
+                <div class="value" id="disc-avg">$0.00</div>
+            </div>
+            <div class="card">
+                <h3>Top Saver</h3>
+                <div class="value" id="disc-topItem" style="font-size:1.2rem">-</div>
+                <div class="sub" id="disc-topItemAmt">$0.00 saved</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Top Products by Savings</h3>
+                <div class="table-container">
+                    <table id="topDiscountsTable">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th class="money">Total Saved</th>
+                                <th>Times Discounted</th>
+                                <th class="money">Avg Savings</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Discount Frequency</h3>
+                <div class="chart-container">
+                    <canvas id="discountChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: REFUNDS
+         ======================================== -->
+    <div id="refunds" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card" style="border-left: 4px solid #7c3aed;">
+                <h3>Total Returned</h3>
+                <div class="value" id="ref-totalReturned">$0.00</div>
+                <div class="sub" id="ref-returnCount">0 Items</div>
+            </div>
+            <div class="card" style="border-left: 4px solid var(--success-color);">
+                <h3>Price Adjustments</h3>
+                <div class="value" id="ref-totalAdjustments">$0.00</div>
+                <div class="sub">Saved via price drops</div>
+            </div>
+            <div class="card">
+                <h3>Return Rate</h3>
+                <div class="value" id="ref-rate">0.0%</div>
+                <div class="sub">Of total spend</div>
+            </div>
+            <div class="card">
+                <h3>Net Spend</h3>
+                <div class="value" id="ref-netSpend">$0.00</div>
+                <div class="sub">Total - Returns - Adjustments</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <h3>Returns by Department</h3>
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="refundsDeptChart"></canvas>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Returned Items</h3>
+                <p class="sub">Items returned for a full refund.</p>
+                <div class="table-container">
+                    <table id="returnsTable">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Returned Date</th>
+                                <th>Bought Date</th>
+                                <th>Days Kept</th>
+                                <th class="money">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Price Adjustments (Refunds)</h3>
+                <p class="sub">Partial refunds or credits (e.g. price drops).</p>
+                <div class="table-container">
+                    <table id="adjustmentsTable">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Date</th>
+                                <th class="money">Refunded</th>
+                                <th class="money">Orig Price</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: GAS
+         ======================================== -->
+    <div id="gas" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card" style="border-left: 4px solid #dc2626;">
+                <h3>Total Gas Spent</h3>
+                <div class="value" id="gas-totalSpent">$0.00</div>
+            </div>
+            <div class="card">
+                <h3>Total Gallons</h3>
+                <div class="value" id="gas-totalGallons">0</div>
+            </div>
+            <div class="card">
+                <h3>Avg Price/Gal</h3>
+                <div class="value" id="gas-avgPrice">$0.00</div>
+                <div class="sub">Weighted Average</div>
+            </div>
+            <div class="card">
+                <h3>Gas Visits</h3>
+                <div class="value" id="gas-visits">0</div>
+                <div class="sub" id="gas-locations">0 Locations</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Price Per Gallon History</h3>
+                <p class="sub">Average price paid per month by grade</p>
+                <div class="chart-container">
+                    <canvas id="gasPriceHistoryChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Gas Spend by Grade</h3>
+                <p class="sub">Total monthly spend split by fuel type</p>
+                <div class="chart-container">
+                    <canvas id="gasSpendBreakdownChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Total Monthly Gas Spending</h3>
+            <div class="chart-container">
+                <canvas id="gasMonthlyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: PAYMENTS
+         ======================================== -->
+    <div id="payments" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card">
+                <h3>Total Payments Tracked</h3>
+                <div class="value" id="pay-total">0</div>
+                <p class="sub">Sum of all tenders</p>
+            </div>
+            <div class="card">
+                <h3>Top Payment Method</h3>
+                <div class="value" id="pay-topMethod">-</div>
+                <p class="sub" id="pay-topMethodAmt">$0.00</p>
+            </div>
+            <div class="card">
+                <h3>Est. Citi Rewards</h3>
+                <div class="value" id="pay-citiRewards">$0.00</div>
+                <p class="sub">4% Gas / 2% Warehouse</p>
+            </div>
+            <div class="card">
+                <h3>Payment Methods</h3>
+                <div class="value" id="pay-methodCount">0</div>
+                <p class="sub">Distinct cards/types</p>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Spend by Payment Method</h3>
+                <div class="chart-container">
+                    <canvas id="payMethodChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Payment Trends (Yearly)</h3>
+                <div class="chart-container">
+                    <canvas id="payHistoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Payment Method Breakdown</h3>
+            <div class="table-container">
+                <table id="paymentsTable">
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Year</th>
+                            <th class="money">Total Spend</th>
+                            <th class="money">Est. Rewards</th>
+                            <th>% of Total</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: PRICE ANALYSIS
+         ======================================== -->
+    <div id="price-analysis" class="tab-content">
+        <div class="grid">
+            <div class="card">
+                <h3>Biggest Price Increases</h3>
+                <p class="sub">Items where Latest Price > First Price</p>
+                <div class="table-container">
+                    <table id="priceIncreaseTable">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Old → New</th>
+                                <th class="money">Diff</th>
+                                <th class="money">%</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Price Drops</h3>
+                <p class="sub">Items where Latest Price < First Price</p>
+                <div class="table-container">
+                    <table id="priceDecreaseTable">
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Old → New</th>
+                                <th class="money">Diff</th>
+                                <th class="money">%</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Most Expensive Items</h3>
+            <p class="sub">Items with highest recorded price (Min 2 purchases)</p>
+            <div class="table-container">
+                <table id="mostExpensiveTable">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th class="money">Max Price</th>
+                            <th class="money">Avg Price</th>
+                            <th>Purchases</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: ANALYSIS
+         ======================================== -->
+    <div id="analysis" class="tab-content">
+        <div class="grid">
+            <div class="card">
+                <h3>Visits by Day of Week</h3>
+                <div class="chart-container">
+                    <canvas id="dowChart"></canvas>
+                </div>
+                <p class="sub" style="margin-top:10px">See which days you shop the most.</p>
+            </div>
+            <div class="card">
+                <h3>Visits by Hour</h3>
+                <div class="chart-container">
+                    <canvas id="hourChart"></canvas>
+                </div>
+                <p class="sub" style="margin-top:10px">Your preferred shopping times.</p>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Spend by Warehouse</h3>
+                <div class="chart-container">
+                    <canvas id="warehouseChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Tax Analysis</h3>
+                <div class="table-container">
+                    <table id="taxTable">
+                        <thead><tr><th>Warehouse</th><th class="money">Total Tax</th><th class="money">Tax Rate (Est)</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Recurring Items Analysis</h3>
+            <p class="sub" style="margin-bottom:15px">Items purchased more than once, sorted by frequency.</p>
+            <div class="table-container">
+                <table id="recurringTable">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Count</th>
+                            <th class="money">Avg Days Between</th>
+                            <th>Last Purchased</th>
+                            <th>Est. Next Buy</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: FORECAST
+         ======================================== -->
+    <div id="forecast" class="tab-content">
+        <div class="grid grid-4">
+            <div class="card">
+                <h3>Weekly Essentials</h3>
+                <div class="value" id="fc-weeklyCount">0</div>
+                <div class="sub">Items bought every ~7 days</div>
+            </div>
+            <div class="card">
+                <h3>Monthly Staples</h3>
+                <div class="value" id="fc-monthlyCount">0</div>
+                <div class="sub">Items bought every ~30 days</div>
+            </div>
+            <div class="card">
+                <h3>Quarterly Stock-up</h3>
+                <div class="value" id="fc-quarterlyCount">0</div>
+                <div class="sub">Items bought every ~3 months</div>
+            </div>
+            <div class="card">
+                <h3>Yearly / Occasional</h3>
+                <div class="value" id="fc-yearlyCount">0</div>
+                <div class="sub">Items bought once a year</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>
+                    Weekly Forecast (Next 7 Days)
+                    <span id="fc-weeklyTotal" class="money" style="font-size:1rem; color:var(--success-color); float:right">$0.00</span>
+                </h3>
+                <div class="table-container">
+                    <table id="fc-weeklyTable">
+                        <thead><tr><th>Item</th><th>Freq</th><th>Last Bought</th><th>Est. Next</th><th class="money">Est. Cost</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>
+                    Monthly Forecast (Next 30 Days)
+                    <span id="fc-monthlyTotal" class="money" style="font-size:1rem; color:var(--success-color); float:right">$0.00</span>
+                </h3>
+                <div class="table-container">
+                    <table id="fc-monthlyTable">
+                        <thead><tr><th>Item</th><th>Freq</th><th>Last Bought</th><th>Est. Next</th><th class="money">Est. Cost</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>
+                    Quarterly Forecast
+                    <span id="fc-quarterlyTotal" class="money" style="font-size:1rem; color:var(--success-color); float:right">$0.00</span>
+                </h3>
+                <div class="table-container">
+                    <table id="fc-quarterlyTable">
+                        <thead><tr><th>Item</th><th>Freq</th><th>Last Bought</th><th>Est. Next</th><th class="money">Est. Cost</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3>
+                    Yearly Forecast
+                    <span id="fc-yearlyTotal" class="money" style="font-size:1rem; color:var(--success-color); float:right">$0.00</span>
+                </h3>
+                <div class="table-container">
+                    <table id="fc-yearlyTable">
+                        <thead><tr><th>Item</th><th>Freq</th><th>Last Bought</th><th>Est. Next</th><th class="money">Est. Cost</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay"></div>
+<div class="loading" id="loadingIndicator">
+    <p>Loading...</p>
+</div>
+
+<!-- Main Application Entry Point (ES6 Module) -->
+<script type="module" src="src/main.js"></script>
+
+</body>
+</html>

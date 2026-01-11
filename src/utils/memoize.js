@@ -196,5 +196,15 @@ export function memoizeLRU(func, maxSize) {
         return cache.size;
     };
 
+    memoized.has = function (...args) {
+        const key = JSON.stringify(args);
+        return cache.has(key);
+    };
+
+    memoized.delete = function (...args) {
+        const key = JSON.stringify(args);
+        return cache.delete(key);
+    };
+
     return memoized;
 }

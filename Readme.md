@@ -38,9 +38,29 @@ Commit the refreshed file (for example, chore: refresh warehouse directory) and 
 
 
 ### Step 5 – Explore the Dashboards
-- Launch [dashboard_comprehensive.html](dashboard_comprehensive.html) in a browser (double-click the file or serve the repo with a simple HTTP server to avoid mixed-content warnings).
+
+There are two ways to run the dashboard:
+
+#### Option A: Modular Version (Recommended)
+The refactored modular architecture requires a simple HTTP server (ES6 modules require CORS):
+
+```bash
+# Using Python (built-in)
+python -m http.server 8000
+
+# Then open in browser
+http://localhost:8000/index.html
+```
+
+Or use VS Code's Live Server extension, or any static file server.
+
+#### Option B: Standalone Version
+- Launch [dashboard_comprehensive.html](dashboard_comprehensive.html) directly in a browser (double-click the file). This is the original monolithic version that works without a server.
+
+#### Using the Dashboard
 - Use the file picker at the top to load the JSON exports. Select multiple files at once (e.g. receipts + online orders + warehouses) for the richest analysis.
 - Navigate the tabs for Overview metrics, Product Search, Category drill-downs, Discounts, Refunds, Gas, Payments, Price Analysis, Deep Analysis, and Forecast insights.
+- Toggle between dark and light themes with the button in the header.
 - Older reference dashboards live under the imported/ directory if you want lighter views:
 	- [imported/dashboard1.html](imported/dashboard1.html) – original receipt summary.
 	- [imported/dashboard1_yearlybottom.html](imported/dashboard1_yearlybottom.html) – adds yearly spend trend.
